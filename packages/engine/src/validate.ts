@@ -18,7 +18,7 @@ const schemaValidator = ajv.compile(schema);
 const BASE_ACTIONS = new Set(['approach', 'flee', 'hold']);
 const LOOT_SPECIAL = new Set(['gold', 'xp']);
 const ASSET_FIELDS = ['image', 'portrait', 'token', 'icon', 'music', 'background', 'vfx', 'sfx'];
-const EXPR_FIELDS = ['amount', 'count', 'dc', 'xp', 'gold', 'hp', 'defense', 'rolls', 'priceModifier', 'perLevel', 'draw', 'distance', 'bonus', 'reviveHp'];
+const EXPR_FIELDS = ['cost', 'amount', 'count', 'dc', 'xp', 'gold', 'hp', 'defense', 'rolls', 'priceModifier', 'perLevel', 'draw', 'distance', 'bonus', 'reviveHp'];
 
 export function validatePack(pack: Pack): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

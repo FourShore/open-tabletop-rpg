@@ -117,6 +117,7 @@ export interface Leveling {
   fixedTiles?: { kind: 'anyStat' | 'heal' | 'gold'; amount?: number; label?: Text }[];
   guaranteeSkillTile?: boolean;
   rerollsPerLevel?: number;
+  reroll?: { cost: Expr; max?: number };
   emptyTierFallback?: 'lower' | 'higher' | 'nearest' | 'skip';
 }
 
@@ -124,6 +125,7 @@ export interface Rules {
   dice?: { check?: string; critOn?: number; fumbleOn?: number; critEffect?: string };
   derived?: Record<string, Expr>;
   statCap?: number;
+  turn?: { order?: 'sides' | 'initiative'; actionsPerTurn?: number; diagonalCost?: number; showEnemyIntents?: boolean };
   groupCheckThreshold?: number;
   helpBonus?: number;
   leveling?: Leveling;

@@ -93,8 +93,13 @@ async function decide(s: GameState): Promise<Action> {
       return { type: 'buy', playerId: buyer.id, itemId: items[pick].itemId };
     }
     case 'levelUp': {
-      const who = nameOf(s, p.playerId);
-      const idx = await choose(`${who} reaches level ${p.level}. Pick a tile:`, p.tiles.map((t) => describeTile(index, t)), (n) => n);
+      const ch = s.party.find((m) => m.id === p.playerId)!;
+      const labels = p.tiles.map((t) => describeTile(index, t));
+      const price = p.freeRerolls > 0 ? 0 : p.rerollCost;
+      const canReroll = price !== undefined && ch.gold >= price;
+      if (canReroll) labels.push(price ? `Reroll for ${price} gold (you have ${ch.gold})` : 'Reroll (free)');
+      const idx = await choose(`${ch.name} reaches level ${p.level}. Pick a tile:`, labels, (n) => n);
+      if (idx === p.tiles.length) return { type: 'rerollTiles', playerId: ch.id };
       const tile = p.tiles[idx];
       let stat: string | undefined;
       if (tile.kind === 'anyStat') stat = await choose('Which stat?', index.abilityStats, (n) => index.abilityStats[n]);
@@ -179,6 +184,9 @@ function print(events: GameEvent[], s: GameState) {
         break;
       case 'bought':
         console.log(`  ${who} buys ${text(index.items.get(e.itemId)?.name)} for ${e.price} gold`);
+        break;
+      case 'tilesRerolled':
+        console.log(`  ${who} ${e.gold ? `pays ${e.gold} gold to reroll` : 'rerolls'}: ${e.tiles.map((t) => describeTile(index, t)).join(' | ')}`);
         break;
       case 'leveledUp':
         console.log(`  ${who} is now level ${e.level}: ${describeTile(index, e.tile)}${e.stat ? ` -> ${e.stat.toUpperCase()}` : ''}`);

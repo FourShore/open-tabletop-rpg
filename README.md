@@ -32,3 +32,8 @@ npm run play -- --players "Ana:rogue,Ben:bard" --seed 7
 3. Grid combat
 4. Progression: inventory, shop UI, campaign saves
 5. Open ecosystem: pack loading by URL, a pack gallery, an editor
+
+## License
+
+Code is [MIT](LICENSE). The spec and the example pack's content are
+[CC BY 4.0](spec/LICENSE.md).

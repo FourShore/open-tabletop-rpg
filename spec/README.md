@@ -38,3 +38,11 @@ Key conventions
 - **Fragments** listed in `include` are merged: arrays concatenate, objects
   merge, an entry with an existing id replaces it. `extends` lets a story pack
   build on another pack's classes and rules.
+- **Turns** default to a heroes phase then an enemy phase, with 2 actions per
+  hero (`rules.turn`). Moving costs an action, as does a typical ability
+  (`cost`). The `actions` modifier grants extra actions.
+- **Stats have no cap** unless `rules.statCap` sets one; scale DCs instead.
+- **Level-ups** can be widened with the `levelUpTiles` modifier and rerolled
+  for gold with `rules.leveling.reroll`.
+
+Licensed CC BY 4.0, see [LICENSE.md](LICENSE.md).

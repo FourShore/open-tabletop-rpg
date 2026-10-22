@@ -144,3 +144,37 @@ describe('game runner', () => {
     expect(() => newGame(index, { seed: 1, players: [{ id: 'x', name: 'X', classId: 'pirate' }] })).toThrow(/Unknown class/);
   });
 });
+
+describe('paid rerolls', () => {
+  function levelUpState() {
+    let s = withDeck(['bandit-camp'], 9, [PARTY[0]]);
+    s = { ...s, party: s.party.map((ch) => ({ ...ch, xp: 0 })) };
+    s = act(index, s, { type: 'next' }).state;
+    return act(index, s, { type: 'resolveCombat', victory: true }).state;
+  }
+
+  it('charges gold, raises the price, and redraws the tiles', () => {
+    let s = levelUpState();
+    expect(s.pending).toMatchObject({ kind: 'levelUp', level: 2, rerollCost: 10 }); // 5 * level + 5 * rerolls
+    const gold = s.party[0].gold;
+    const r = act(index, s, { type: 'rerollTiles', playerId: 'p1' });
+    expect(r.events[0]).toMatchObject({ type: 'tilesRerolled', gold: 10, rerollCost: 15 });
+    s = r.state;
+    expect(s.party[0].gold).toBe(gold - 10);
+    s = { ...s, party: [{ ...s.party[0], gold: 3 }] };
+    expect(() => act(index, s, { type: 'rerollTiles', playerId: 'p1' })).toThrow(/needs 15/);
+  });
+
+  it('is off when the pack has no reroll rule', () => {
+    const rules = index.pack.rules!.leveling!;
+    const saved = rules.reroll;
+    delete rules.reroll;
+    try {
+      const s = levelUpState();
+      expect((s.pending as { rerollCost?: number }).rerollCost).toBeUndefined();
+      expect(() => act(index, s, { type: 'rerollTiles', playerId: 'p1' })).toThrow(/No rerolls left/);
+    } finally {
+      rules.reroll = saved;
+    }
+  });
+});

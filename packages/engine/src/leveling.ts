@@ -1,7 +1,7 @@
 // The level-up tile draw. Defaults match the design doc; every number comes
 // from rules.leveling when the pack sets it.
 
-import { characterWhenContext, maxHp, type Character } from './character';
+import { characterWhenContext, maxHp, modifier, type Character } from './character';
 import type { PackIndex } from './pack';
 import type { Rng } from './rng';
 import type { Leveling, SkillDef } from './types';
@@ -26,6 +26,7 @@ const DEFAULT_TILE_COUNT: Leveling['tileCount'] = [
   { level: { min: 10 }, count: 5 },
 ];
 
+/** Random tiles offered at `level`, before any levelUpTiles modifier. */
 export function tileCount(lv: Leveling, level: number): number {
   return (lv.tileCount ?? DEFAULT_TILE_COUNT)!.find((b) => inRange(level, b.level))?.count ?? 3;
 }
@@ -53,7 +54,8 @@ export function eligibleSkills(index: PackIndex, ch: Character, flags: Set<strin
  */
 export function drawLevelUpTiles(index: PackIndex, ch: Character, newLevel: number, rng: Rng, flags = new Set<string>(), partySize = 1): Tile[] {
   const lv = index.pack.rules?.leveling ?? {};
-  const count = tileCount(lv, newLevel);
+  // Skills and gear can widen (or narrow) the offer; at least one tile is always drawn.
+  const count = Math.max(1, tileCount(lv, newLevel) + Math.floor(modifier(index, ch, 'levelUpTiles')));
   const weights = tierWeights(lv, newLevel);
   const fallback = lv.emptyTierFallback ?? 'lower';
   const category = lv.categoryWeights ?? { skill: 80, statBoost: 20 };

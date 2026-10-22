@@ -1,6 +1,7 @@
 {
   "name": "@otrpg/engine",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Rules engine for Open Tabletop RPG game packs: pack loading, validation, dice, checks, leveling and the event-deck runner.",
   "type": "module",
   "main": "src/index.ts",

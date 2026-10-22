@@ -16,10 +16,9 @@
       "move": "classMove",
       "spellDc": "10 + max(int, wis)"
     },
-    "statCap": 10,
     "groupCheckThreshold": 0.5,
     "helpBonus": 2,
-    "turn": { "order": "initiative", "actions": ["move", "action", "bonus"], "diagonalCost": 1, "showEnemyIntents": true },
+    "turn": { "order": "sides", "actionsPerTurn": 2, "diagonalCost": 1, "showEnemyIntents": true },
     "downed": {
       "enabled": true,
       "reviveCheck": { "stat": "wis", "dc": 10 },
@@ -53,6 +52,7 @@
       "fixedTiles": [{ "kind": "anyStat", "amount": 1, "label": "+1 to any stat" }],
       "guaranteeSkillTile": true,
       "rerollsPerLevel": 0,
+      "reroll": { "cost": "5 * level + 5 * rerolls" },
       "emptyTierFallback": "lower"
     }
   },

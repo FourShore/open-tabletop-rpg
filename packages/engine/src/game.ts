@@ -35,7 +35,7 @@ export type Prompt =
   | { kind: 'chooseRoller'; check: CheckSpec; stats: string[]; branches: Branches; chooserId?: string }
   | { kind: 'combat'; cardId: string; map: string; enemies: { enemy: string; count: number; round?: number }[]; onVictory: Effect[]; onDefeat?: Effect[] }
   | { kind: 'shop'; cardId: string; stock: { itemId: string; price: number; qty: number }[] }
-  | { kind: 'levelUp'; playerId: string; level: number; tiles: Tile[] };
+  | { kind: 'levelUp'; playerId: string; level: number; tiles: Tile[]; rerolls: number; freeRerolls: number; rerollCost?: number };
 
 export interface Branches {
   onSuccess?: Effect[];
@@ -84,7 +84,8 @@ export type GameEvent =
   | { type: 'combatStarted'; map: string; enemies: { enemy: string; count: number }[] }
   | { type: 'combatEnded'; victory: boolean }
   | { type: 'bought'; playerId: string; itemId: string; price: number }
-  | { type: 'levelUpOffered'; playerId: string; level: number; tiles: Tile[] }
+  | { type: 'levelUpOffered'; playerId: string; level: number; tiles: Tile[]; rerollCost?: number }
+  | { type: 'tilesRerolled'; playerId: string; gold: number; tiles: Tile[]; rerollCost?: number }
   | { type: 'leveledUp'; playerId: string; level: number; tile: Tile; stat?: string }
   | { type: 'scenarioEnded'; result: 'victory' | 'defeat'; unlocked: string[] };
 
@@ -95,7 +96,8 @@ export type Action =
   | { type: 'resolveCombat'; victory: boolean }
   | { type: 'buy'; playerId: string; itemId: string }
   | { type: 'leaveShop' }
-  | { type: 'pickTile'; playerId: string; index: number; stat?: string };
+  | { type: 'pickTile'; playerId: string; index: number; stat?: string }
+  | { type: 'rerollTiles'; playerId: string };
 
 export interface StepResult {
   state: GameState;
@@ -155,7 +157,9 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
   return run(index, state, (c) => {
     const s = c.s;
     // Level-ups earned on the last card are still picked after the scenario ends.
-    if (s.phase !== 'playing' && !(s.phase === 'ended' && action.type === 'pickTile')) throw new GameError('No scenario is running');
+    if (s.phase !== 'playing' && !(s.phase === 'ended' && (action.type === 'pickTile' || action.type === 'rerollTiles'))) {
+      throw new GameError('No scenario is running');
+    }
     const p = s.pending;
     switch (action.type) {
       case 'next':
@@ -212,6 +216,21 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
         s.pending = null;
         c.events.push({ type: 'leveledUp', playerId: ch.id, level: ch.level, tile, stat: action.stat });
         return offerLevelUps(c);
+      }
+      case 'rerollTiles': {
+        if (p?.kind !== 'levelUp' || p.playerId !== action.playerId) throw new GameError('No level-up is waiting for this player');
+        const ch = player(c, action.playerId);
+        const free = p.freeRerolls > 0;
+        if (!free && p.rerollCost === undefined) throw new GameError('No rerolls left');
+        const price = free ? 0 : p.rerollCost!;
+        if (ch.gold < price) throw new GameError(`${ch.name} has ${ch.gold} gold, needs ${price}`);
+        ch.gold -= price;
+        if (free) p.freeRerolls -= 1;
+        else p.rerolls += 1;
+        p.tiles = drawLevelUpTiles(c.index, ch, p.level, c.rng, allFlags(s), s.party.length);
+        p.rerollCost = rerollCost(c, p.level, p.rerolls);
+        c.events.push({ type: 'tilesRerolled', playerId: ch.id, gold: price, tiles: p.tiles, rerollCost: p.rerollCost });
+        return;
       }
     }
   });
@@ -372,9 +391,19 @@ function offerLevelUps(c: Ctx): void {
   const maxLevel = index.pack.rules?.leveling?.maxLevel ?? 20;
   const ch = s.party.find((p) => p.level < maxLevel && levelForXp(index, p.xp) > p.level);
   if (!ch) return;
-  const tiles = drawLevelUpTiles(index, ch, ch.level + 1, c.rng, allFlags(s), s.party.length);
-  s.pending = { kind: 'levelUp', playerId: ch.id, level: ch.level + 1, tiles };
-  c.events.push({ type: 'levelUpOffered', playerId: ch.id, level: ch.level + 1, tiles });
+  const level = ch.level + 1;
+  const tiles = drawLevelUpTiles(index, ch, level, c.rng, allFlags(s), s.party.length);
+  const cost = rerollCost(c, level, 0);
+  const freeRerolls = index.pack.rules?.leveling?.rerollsPerLevel ?? 0;
+  s.pending = { kind: 'levelUp', playerId: ch.id, level, tiles, rerolls: 0, freeRerolls, rerollCost: cost };
+  c.events.push({ type: 'levelUpOffered', playerId: ch.id, level, tiles, rerollCost: cost });
+}
+
+/** Gold for the next paid reroll, or undefined when paid rerolls are off or used up. */
+function rerollCost(c: Ctx, level: number, rerolls: number): number | undefined {
+  const r = c.index.pack.rules?.leveling?.reroll;
+  if (!r || (r.max !== undefined && rerolls >= r.max)) return undefined;
+  return Math.max(0, evalInt(r.cost, { level, rerolls }));
 }
 
 function endScenario(c: Ctx, result: 'victory' | 'defeat', unlock: string[]): void {

@@ -97,3 +97,27 @@ describe('level-up tile draw', () => {
     expect(() => applyTile(index, ch, { kind: 'anyStat', amount: 1 })).toThrow(/Pick an ability stat/);
   });
 });
+
+describe('level-up options from decisions', () => {
+  it('adds tiles for a levelUpTiles modifier', async () => {
+    const index = await exampleIndex();
+    const rng = createRng(4);
+    const ch = createCharacter(index, { id: 'a', name: 'A', classId: 'rogue' });
+    expect(drawLevelUpTiles(index, ch, 2, rng)).toHaveLength(4); // 3 random + the +1 any stat tile
+    ch.equipment.head = 'scholars-monocle';
+    expect(drawLevelUpTiles(index, ch, 2, rng)).toHaveLength(5);
+  });
+
+  it('has no stat cap unless the pack sets one', async () => {
+    const index = await exampleIndex();
+    const ch = createCharacter(index, { id: 'a', name: 'A', classId: 'wizard' });
+    ch.stats.int = 85;
+    applyTile(index, ch, { kind: 'statBoost', stat: 'int', amount: 2 });
+    expect(ch.stats.int).toBe(87);
+    index.pack.rules!.statCap = 10;
+    applyTile(index, ch, { kind: 'anyStat', amount: 1 }, 'str');
+    applyTile(index, ch, { kind: 'statBoost', stat: 'int', amount: 2 });
+    expect(ch.stats.int).toBe(10);
+    delete index.pack.rules!.statCap;
+  });
+});

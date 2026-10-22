@@ -141,19 +141,23 @@
           "description": "Formulas for derived values. Keys used by the engine: maxHp, defense, initiative, move, spellDc, carry.",
           "additionalProperties": { "$ref": "#/$defs/expr" }
         },
-        "statCap": { "type": "integer", "default": 10 },
+        "statCap": { "type": "integer", "description": "Optional ceiling for ability stats. Omit for no cap: checks scale their DCs instead (an endgame DC 100 against +85 INT is fine)." },
         "groupCheckThreshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Fraction of the party that must pass a group check." },
         "helpBonus": { "type": "integer", "default": 2 },
         "turn": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "order": { "enum": ["initiative", "sides"], "default": "initiative" },
-            "actions": {
-              "type": "array",
-              "items": { "type": "string" },
-              "default": ["move", "action", "bonus"],
-              "description": "Action slots per turn; skills declare which slot they cost."
+            "order": {
+              "enum": ["sides", "initiative"],
+              "default": "sides",
+              "description": "sides: all heroes act in any order they agree on, then all enemies. initiative: individual turns by d20 + dex."
+            },
+            "actionsPerTurn": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 2,
+              "description": "Actions each hero gets per turn. Moving up to `move` squares costs one action, and so does a typical ability. Skills, items and conditions add more with the `actions` modifier."
             },
             "diagonalCost": { "type": "number", "default": 1 },
             "showEnemyIntents": { "type": "boolean", "default": true }
@@ -184,7 +188,7 @@
         },
         "tileCount": {
           "type": "array",
-          "description": "Number of random tiles offered, by level band. First matching band wins.",
+          "description": "Number of random tiles offered, by level band. First matching band wins. Skills, items and conditions add to it with the `levelUpTiles` modifier (negative values remove tiles; at least one is always offered).",
           "items": {
             "type": "object",
             "required": ["level", "count"],
@@ -242,7 +246,17 @@
           "default": [{ "kind": "anyStat", "amount": 1 }]
         },
         "guaranteeSkillTile": { "type": "boolean", "default": true },
-        "rerollsPerLevel": { "type": "integer", "minimum": 0, "default": 0 },
+        "rerollsPerLevel": { "type": "integer", "minimum": 0, "default": 0, "description": "Free rerolls per level-up." },
+        "reroll": {
+          "type": "object",
+          "description": "Paid rerolls: spend gold to redraw the random tiles.",
+          "required": ["cost"],
+          "additionalProperties": false,
+          "properties": {
+            "cost": { "$ref": "#/$defs/expr", "description": "Gold per reroll. Can use `level` (the level being reached) and `rerolls` (rerolls already taken this level-up)." },
+            "max": { "type": "integer", "minimum": 1, "description": "Most paid rerolls per level-up; omit for no limit." }
+          }
+        },
         "emptyTierFallback": { "enum": ["lower", "higher", "nearest", "skip"], "default": "lower" }
       }
     },
@@ -300,7 +314,7 @@
 
     "modifiers": {
       "type": "object",
-      "description": "Stat or derived-value key -> flat bonus (expression allowed).",
+      "description": "Stat or derived-value key -> flat bonus (expression allowed). Besides stats: armor, defense, attack, checks, hp, move, actions (extra actions per turn), levelUpTiles (extra level-up tiles).",
       "additionalProperties": { "$ref": "#/$defs/expr" }
     },
 
@@ -374,7 +388,7 @@
           "description": "For passives: bonus to out-of-combat checks by stat or tag.",
           "additionalProperties": { "type": "integer" }
         },
-        "cost": { "type": "string", "description": "Action slot: move, action, bonus, or free." },
+        "cost": { "type": "integer", "minimum": 0, "default": 1, "description": "Actions it costs. 0 = free." },
         "cooldown": { "type": "integer", "minimum": 0, "description": "Rounds before it can be used again." },
         "usesPerScenario": { "type": "integer", "minimum": 1 },
         "usesPerCombat": { "type": "integer", "minimum": 1 },
@@ -498,7 +512,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "cost": { "type": "string" },
+            "cost": { "type": "integer", "minimum": 0, "default": 1 },
             "targeting": { "$ref": "#/$defs/targeting" },
             "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } }
           }
