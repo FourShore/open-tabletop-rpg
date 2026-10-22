@@ -1,0 +1,77 @@
+{
+  "stats": [
+    { "key": "str", "name": "Strength", "abbr": "STR", "description": "Melee hit and damage, feats of force." },
+    { "key": "dex", "name": "Dexterity", "abbr": "DEX", "description": "Ranged hit, defense, initiative, stealth, traps." },
+    { "key": "int", "name": "Intelligence", "abbr": "INT", "description": "Spell power, lore, puzzles." },
+    { "key": "wis", "name": "Wisdom", "abbr": "WIS", "description": "Healing, perception, resisting fear and charm." },
+    { "key": "cha", "name": "Charisma", "abbr": "CHA", "description": "Persuasion, prices, ally buffs." },
+    { "key": "hp", "name": "Health", "abbr": "HP", "kind": "resource" }
+  ],
+  "rules": {
+    "dice": { "check": "d20", "critOn": 20, "fumbleOn": 1, "critEffect": "doubleDice" },
+    "derived": {
+      "maxHp": "classHpBase + classHpPerLevel * (level - 1)",
+      "defense": "10 + dex + armor",
+      "initiative": "d20 + dex",
+      "move": "classMove",
+      "spellDc": "10 + max(int, wis)"
+    },
+    "statCap": 10,
+    "groupCheckThreshold": 0.5,
+    "helpBonus": 2,
+    "turn": { "order": "initiative", "actions": ["move", "action", "bonus"], "diagonalCost": 1, "showEnemyIntents": true },
+    "downed": {
+      "enabled": true,
+      "reviveCheck": { "stat": "wis", "dc": 10 },
+      "reviveHp": "ceil(maxHp / 4)"
+    },
+    "leveling": {
+      "maxLevel": 20,
+      "xpThresholds": [10, 25, 45, 70, 100, 140, 185, 235, 290, 350, 420, 500, 590, 690, 800, 920, 1050, 1190, 1340],
+      "tileCount": [
+        { "level": { "min": 2, "max": 4 }, "count": 3 },
+        { "level": { "min": 5, "max": 9 }, "count": 4 },
+        { "level": { "min": 10 }, "count": 5 }
+      ],
+      "categoryWeights": { "skill": 80, "statBoost": 20 },
+      "tierWeights": [
+        { "level": { "min": 2, "max": 3 }, "weights": [70, 25, 5, 0, 0] },
+        { "level": { "min": 4, "max": 6 }, "weights": [45, 35, 15, 5, 0] },
+        { "level": { "min": 7, "max": 9 }, "weights": [25, 35, 25, 12, 3] },
+        { "level": { "min": 10, "max": 14 }, "weights": [10, 25, 30, 25, 10] },
+        { "level": { "min": 15 }, "weights": [5, 15, 25, 30, 25] }
+      ],
+      "statBoostTiles": [
+        { "stat": "primary", "amount": 2, "weight": 3 },
+        { "stat": "str", "amount": 2 },
+        { "stat": "dex", "amount": 2 },
+        { "stat": "int", "amount": 2 },
+        { "stat": "wis", "amount": 2 },
+        { "stat": "cha", "amount": 2 },
+        { "stat": "hp", "amount": 6, "weight": 2 }
+      ],
+      "fixedTiles": [{ "kind": "anyStat", "amount": 1, "label": "+1 to any stat" }],
+      "guaranteeSkillTile": true,
+      "rerollsPerLevel": 0,
+      "emptyTierFallback": "lower"
+    }
+  },
+  "conditions": [
+    { "id": "poisoned", "name": "Poisoned", "onTurnStart": [{ "type": "damage", "target": "self", "amount": 2, "damageType": "poison" }], "endsOn": ["rest"] },
+    { "id": "burning", "name": "Burning", "onTurnStart": [{ "type": "damage", "target": "self", "amount": "1d4", "damageType": "fire" }], "stacking": "refresh" },
+    { "id": "stunned", "name": "Stunned", "skipTurn": true },
+    { "id": "rooted", "name": "Rooted", "preventMove": true },
+    { "id": "weakened", "name": "Weakened", "modifiers": { "str": -2, "dex": -2, "int": -2 } },
+    { "id": "blessed", "name": "Blessed", "positive": true, "modifiers": { "attack": 2, "checks": 2 } },
+    { "id": "shielded", "name": "Shielded", "positive": true, "modifiers": { "defense": 3 } },
+    { "id": "hidden", "name": "Hidden", "positive": true, "untargetable": true, "endsOn": ["act", "damaged"] }
+  ],
+  "terrain": [
+    { "id": "floor", "symbol": ".", "moveCost": 1 },
+    { "id": "wall", "symbol": "#", "moveCost": -1, "blocksSight": true },
+    { "id": "brush", "name": "Thick brush", "symbol": "%", "moveCost": 2, "defenseBonus": 2 },
+    { "id": "water", "name": "Shallow stream", "symbol": "~", "moveCost": 2 },
+    { "id": "rocks", "name": "Boulders", "symbol": "^", "moveCost": -1, "defenseBonus": 2 },
+    { "id": "fire", "name": "Campfire", "symbol": "*", "moveCost": 1, "onEnter": [{ "type": "condition", "target": "self", "condition": "burning", "duration": 2 }] }
+  ]
+}

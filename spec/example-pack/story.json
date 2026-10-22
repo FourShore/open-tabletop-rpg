@@ -1,0 +1,118 @@
+{
+  "campaign": {
+    "name": "The Hollow Road",
+    "intro": "Merchants vanish on the road to Ashford. The town council pays well for answers.",
+    "startingLevel": 1,
+    "startingGold": 10,
+    "startScenarios": ["hollow-road-1"],
+    "persistBetweenScenarios": ["items", "gold", "xp"]
+  },
+  "cards": [
+    { "id": "road-begins", "type": "story", "title": "The Hollow Road", "image": "img.road", "music": "music.road",
+      "text": "Wagon ruts, then nothing. The trees lean close and the birds have gone quiet.",
+      "outcomes": [{ "type": "grant", "target": "party", "gold": 5, "split": "each" }] },
+
+    { "id": "goblin-ambush", "type": "combat", "title": "Ambush!", "image": "img.ambush", "music": "music.battle",
+      "text": "Goblins burst from the brush, shrieking.",
+      "combat": {
+        "map": "forest-clearing",
+        "spawns": [
+          { "enemy": "goblin", "count": "1 + partySize", "at": "north" },
+          { "enemy": "goblin-archer", "count": "max(1, floor(partySize / 2))", "at": "east" }
+        ],
+        "objective": { "kind": "defeatAll" }
+      },
+      "onVictory": [{ "type": "grant", "target": "party", "xp": 6, "split": "each" }, { "type": "setFlag", "flag": "fought-goblins" }],
+      "onDefeat": [{ "type": "endScenario", "result": "defeat" }] },
+
+    { "id": "rickety-bridge", "type": "check", "title": "The Rickety Bridge", "image": "img.bridge",
+      "text": "A rope bridge sways over a gorge. Some planks are clearly missing.",
+      "check": { "stat": "dex", "dc": 11, "mode": "each" },
+      "onSuccess": [{ "type": "grant", "target": "roller", "xp": 2 }],
+      "onFailure": [{ "type": "damage", "target": "roller", "amount": "1d6" }] },
+
+    { "id": "wolf-pack", "type": "combat", "title": "Hungry Wolves", "requires": { "not": { "flag": "fed-wolves" } },
+      "combat": { "map": "forest-clearing", "spawns": [{ "enemy": "wolf", "count": "partySize", "at": "east" }] },
+      "onVictory": [{ "type": "grant", "target": "party", "xp": 5 }] },
+
+    { "id": "roadside-shrine", "type": "choice", "title": "A Roadside Shrine", "image": "img.shrine",
+      "text": "Moss-covered stone, a bowl of old offerings, and faint carvings no one can read.",
+      "vote": "majority",
+      "options": [
+        { "label": "Leave an offering (5 gold each)",
+          "outcomes": [{ "type": "take", "target": "party", "gold": 5, "split": "each" }, { "type": "condition", "target": "party", "condition": "blessed", "duration": 6 }] },
+        { "label": "Decipher the carvings",
+          "check": { "stat": ["int", "wis"], "dc": 13, "mode": "best", "tags": ["lore"] },
+          "onSuccess": [{ "type": "narrate", "text": "The carvings mark a hidden path to the bandit camp." }, { "type": "setFlag", "flag": "knows-shortcut" }, { "type": "grant", "target": "party", "xp": 4 }],
+          "onFailure": [{ "type": "narrate", "text": "The words swim before your eyes. Nothing comes of it." }] },
+        { "label": "Take the offerings",
+          "outcomes": [
+            { "type": "grant", "target": "chosen", "gold": "2d6" },
+            { "type": "random", "options": [
+              { "weight": 2, "effects": [{ "type": "narrate", "text": "Nothing happens. This time." }] },
+              { "weight": 1, "effects": [{ "type": "condition", "target": "chosen", "condition": "weakened", "duration": 6 }, { "type": "shuffleIn", "card": "wolf-pack" }] }
+            ] }
+          ] }
+      ] },
+
+    { "id": "bandit-scout", "type": "choice", "title": "A Lone Scout", "vote": "leader",
+      "text": "A bandit scout freezes, hand on her knife. She hasn't run yet.",
+      "options": [
+        { "label": "Talk her down",
+          "check": { "stat": "cha", "dc": 12, "mode": "best", "tags": ["persuade"] },
+          "onSuccess": [{ "type": "setFlag", "flag": "scout-turned" }, { "type": "narrate", "text": "She tells you the camp's guard rotation." }],
+          "onFailure": [{ "type": "insertCard", "card": "goblin-ambush", "position": "top" }] },
+        { "label": "Grab her before she runs",
+          "check": { "stat": "dex", "dc": 14, "mode": "best" },
+          "onSuccess": [{ "type": "setFlag", "flag": "scout-captured" }],
+          "onFailure": [{ "type": "setFlag", "flag": "camp-alerted" }] }
+      ] },
+
+    { "id": "campfire-rest", "type": "rest", "title": "Campfire", "image": "img.camp",
+      "text": "A quiet hollow. Time to bind wounds.",
+      "outcomes": [{ "type": "heal", "target": "party", "amount": "maxHp / 2" }, { "type": "resetCooldowns", "target": "party" }] },
+
+    { "id": "peddler", "type": "shop", "title": "Wandering Peddler",
+      "text": "\"Potions! Trinkets! Very reasonable prices, very few questions.\"",
+      "stock": [{ "id": "healing-potion", "count": 4 }, { "id": "leather-armor" }, { "id": "ring-of-warding", "weight": 0.3 }],
+      "priceModifier": "1 - 0.05 * max(0, partyCha - 2)" },
+
+    { "id": "bandit-camp", "type": "combat", "title": "The Bandit Camp", "music": "music.battle",
+      "text": "Tents, a cookfire, stolen cargo, and Captain Vessa, who does not look surprised to see you.",
+      "combat": {
+        "map": "bandit-camp",
+        "spawns": [
+          { "enemy": "bandit-captain", "at": "tent" },
+          { "enemy": "goblin", "count": "partySize", "at": "guards", "when": { "not": { "flag": "scout-turned" } } },
+          { "enemy": "goblin", "count": 1, "at": "guards", "when": { "flag": "scout-turned" } },
+          { "enemy": "goblin-archer", "count": 2, "at": "guards", "round": 3, "when": { "flag": "camp-alerted" } }
+        ],
+        "objective": { "kind": "defeatTarget", "target": "bandit-captain" }
+      },
+      "onVictory": [
+        { "type": "grant", "target": "party", "xp": 15, "gold": 30, "split": "each" },
+        { "type": "endScenario", "result": "victory", "unlock": ["hollow-road-2"] }
+      ],
+      "onDefeat": [{ "type": "endScenario", "result": "defeat" }] }
+  ],
+  "cardPools": [
+    { "id": "pool.road-encounters", "cards": [
+      { "id": "goblin-ambush", "weight": 3 },
+      { "id": "wolf-pack", "weight": 2 },
+      { "id": "rickety-bridge", "weight": 2 },
+      { "id": "roadside-shrine", "weight": 2 },
+      { "id": "peddler", "weight": 1, "when": { "partySize": { "min": 2 } } }
+    ] }
+  ],
+  "scenarios": [
+    { "id": "hollow-road-1", "name": "Chapter 1: The Missing Merchants", "image": "img.road",
+      "recommendedLevel": { "min": 1, "max": 2 }, "partySize": { "min": 1, "max": 6 },
+      "deck": [
+        { "card": "road-begins" },
+        { "pool": "pool.road-encounters", "draw": 3 },
+        { "card": "bandit-scout" },
+        { "card": "campfire-rest" },
+        { "card": "bandit-camp" }
+      ] }
+  ]
+}

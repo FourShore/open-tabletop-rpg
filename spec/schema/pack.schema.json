@@ -1,0 +1,760 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/open-tabletop-rpg/pack.schema.json",
+  "title": "Open Tabletop RPG Game Pack",
+  "description": "A game pack after all `include` files are merged. Every rule, class, skill, enemy, card and scenario of a game lives here. Version 0.1 (draft).",
+  "type": "object",
+  "required": ["spec", "id", "name", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "spec": { "const": "otrpg/0.1", "description": "Spec version this pack targets." },
+    "id": { "$ref": "#/$defs/id" },
+    "name": { "type": "string" },
+    "version": { "type": "string", "description": "The pack's own semver." },
+    "description": { "type": "string" },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "license": { "type": "string" },
+    "extends": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Other pack ids this pack builds on (e.g. a story pack that reuses the core classes). Later packs override earlier ones by id."
+    },
+    "include": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Relative paths of fragment files. Arrays are concatenated, objects are merged, entries with the same id are replaced."
+    },
+    "assets": {
+      "type": "object",
+      "description": "Asset key -> file. Every image/audio field elsewhere holds an asset key, never a path.",
+      "propertyNames": { "$ref": "#/$defs/idPattern" },
+      "additionalProperties": { "$ref": "#/$defs/asset" }
+    },
+    "rules": { "$ref": "#/$defs/rules" },
+    "stats": { "type": "array", "items": { "$ref": "#/$defs/stat" } },
+    "conditions": { "type": "array", "items": { "$ref": "#/$defs/conditionDef" } },
+    "terrain": { "type": "array", "items": { "$ref": "#/$defs/terrain" } },
+    "classes": { "type": "array", "items": { "$ref": "#/$defs/class" } },
+    "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+    "lootTables": { "type": "array", "items": { "$ref": "#/$defs/lootTable" } },
+    "enemies": { "type": "array", "items": { "$ref": "#/$defs/enemy" } },
+    "maps": { "type": "array", "items": { "$ref": "#/$defs/map" } },
+    "cards": { "type": "array", "items": { "$ref": "#/$defs/card" } },
+    "cardPools": { "type": "array", "items": { "$ref": "#/$defs/cardPool" } },
+    "scenarios": { "type": "array", "items": { "$ref": "#/$defs/scenario" } },
+    "campaign": { "$ref": "#/$defs/campaign" }
+  },
+
+  "$defs": {
+    "idPattern": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "id": { "$ref": "#/$defs/idPattern", "description": "Lowercase kebab/dot ids, unique within their collection." },
+    "assetRef": { "$ref": "#/$defs/idPattern", "description": "A key in the top-level `assets` map." },
+    "text": {
+      "description": "Plain text, or a map of locale -> text for translated packs.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object", "additionalProperties": { "type": "string" }, "minProperties": 1 }
+      ]
+    },
+    "expr": {
+      "description": "Number or expression. Grammar: integers, dice (2d6, d20), stat keys (str, dex...), `level`, `partySize`, `partyLevel`, + - * /, parentheses, min(a,b), max(a,b), floor(x), ceil(x). Example: \"1d8+str\", \"10+dex+armor\".",
+      "oneOf": [{ "type": "number" }, { "type": "string", "minLength": 1 }]
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "min": { "type": "number" }, "max": { "type": "number" } }
+    },
+
+    "when": {
+      "description": "A condition on game state. Combine with all/any/not.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "all": { "type": "array", "items": { "$ref": "#/$defs/when" } },
+        "any": { "type": "array", "items": { "$ref": "#/$defs/when" } },
+        "not": { "$ref": "#/$defs/when" },
+        "flag": { "type": "string", "description": "Campaign/scenario flag is set." },
+        "level": { "$ref": "#/$defs/range", "description": "Character level (in a character context) or average party level." },
+        "partySize": { "$ref": "#/$defs/range" },
+        "stat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["key"],
+          "properties": { "key": { "type": "string" }, "min": { "type": "number" }, "max": { "type": "number" } }
+        },
+        "hasSkill": { "type": "string" },
+        "hasItem": { "type": "string" },
+        "class": { "type": "string" },
+        "hpBelow": { "type": "number", "description": "Fraction of max HP, 0..1." },
+        "adjacentToEnemy": { "type": "boolean" },
+        "round": { "$ref": "#/$defs/range" },
+        "chance": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+
+    "weighted": {
+      "description": "The one shape used for every random pick in a pack.",
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "weight": { "type": "number", "minimum": 0, "default": 1 },
+        "count": { "$ref": "#/$defs/expr", "description": "Quantity granted/spawned when picked (default 1)." },
+        "when": { "$ref": "#/$defs/when" }
+      }
+    },
+
+    "asset": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Relative to the pack root, or an https URL." },
+        "type": { "enum": ["image", "sprite", "audio", "music", "font", "video"] },
+        "credit": { "type": "string" },
+        "frames": { "type": "integer", "minimum": 1, "description": "Sprite sheet frame count." },
+        "frameSize": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+      }
+    },
+
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dice": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "check": { "type": "string", "default": "d20", "description": "Dice expression for checks and attacks, e.g. d20 or 2d6." },
+            "critOn": { "type": "integer", "default": 20 },
+            "fumbleOn": { "type": "integer", "default": 1 },
+            "critEffect": { "enum": ["doubleDice", "maxDice", "none"], "default": "doubleDice" }
+          }
+        },
+        "derived": {
+          "type": "object",
+          "description": "Formulas for derived values. Keys used by the engine: maxHp, defense, initiative, move, spellDc, carry.",
+          "additionalProperties": { "$ref": "#/$defs/expr" }
+        },
+        "statCap": { "type": "integer", "default": 10 },
+        "groupCheckThreshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Fraction of the party that must pass a group check." },
+        "helpBonus": { "type": "integer", "default": 2 },
+        "turn": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "order": { "enum": ["initiative", "sides"], "default": "initiative" },
+            "actions": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": ["move", "action", "bonus"],
+              "description": "Action slots per turn; skills declare which slot they cost."
+            },
+            "diagonalCost": { "type": "number", "default": 1 },
+            "showEnemyIntents": { "type": "boolean", "default": true }
+          }
+        },
+        "downed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "reviveCheck": { "$ref": "#/$defs/checkSpec" },
+            "reviveHp": { "$ref": "#/$defs/expr" }
+          }
+        },
+        "leveling": { "$ref": "#/$defs/leveling" }
+      }
+    },
+
+    "leveling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxLevel": { "type": "integer", "minimum": 1, "default": 20 },
+        "xpThresholds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "Total XP needed for level 2, 3, 4..."
+        },
+        "tileCount": {
+          "type": "array",
+          "description": "Number of random tiles offered, by level band. First matching band wins.",
+          "items": {
+            "type": "object",
+            "required": ["level", "count"],
+            "additionalProperties": false,
+            "properties": { "level": { "$ref": "#/$defs/range" }, "count": { "type": "integer", "minimum": 1 } }
+          }
+        },
+        "categoryWeights": {
+          "type": "object",
+          "description": "Chance each random slot is a skill vs a stat boost.",
+          "additionalProperties": { "type": "number", "minimum": 0 },
+          "default": { "skill": 80, "statBoost": 20 }
+        },
+        "tierWeights": {
+          "type": "array",
+          "description": "Skill tier weights by character level band. Weights per tier, index 0 = tier 1.",
+          "items": {
+            "type": "object",
+            "required": ["level", "weights"],
+            "additionalProperties": false,
+            "properties": {
+              "level": { "$ref": "#/$defs/range" },
+              "weights": { "type": "array", "items": { "type": "number", "minimum": 0 } }
+            }
+          }
+        },
+        "statBoostTiles": {
+          "type": "array",
+          "description": "Stat-boost tiles that can be drawn (e.g. +2 str).",
+          "items": {
+            "type": "object",
+            "required": ["stat", "amount"],
+            "additionalProperties": false,
+            "properties": {
+              "stat": { "type": "string", "description": "A stat key, or \"primary\" for the class's first key stat." },
+              "amount": { "type": "integer" },
+              "weight": { "type": "number", "minimum": 0, "default": 1 },
+              "when": { "$ref": "#/$defs/when" }
+            }
+          }
+        },
+        "fixedTiles": {
+          "type": "array",
+          "description": "Tiles always offered in addition to the random ones.",
+          "items": {
+            "type": "object",
+            "required": ["kind"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["anyStat", "heal", "gold"] },
+              "amount": { "type": "integer" },
+              "label": { "$ref": "#/$defs/text" }
+            }
+          },
+          "default": [{ "kind": "anyStat", "amount": 1 }]
+        },
+        "guaranteeSkillTile": { "type": "boolean", "default": true },
+        "rerollsPerLevel": { "type": "integer", "minimum": 0, "default": 0 },
+        "emptyTierFallback": { "enum": ["lower", "higher", "nearest", "skip"], "default": "lower" }
+      }
+    },
+
+    "stat": {
+      "type": "object",
+      "required": ["key", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+        "name": { "$ref": "#/$defs/text" },
+        "abbr": { "type": "string" },
+        "description": { "$ref": "#/$defs/text" },
+        "icon": { "$ref": "#/$defs/assetRef" },
+        "kind": { "enum": ["ability", "resource"], "default": "ability", "description": "Abilities are rolled; resources (like hp) are spent." }
+      }
+    },
+
+    "conditionDef": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "icon": { "$ref": "#/$defs/assetRef" },
+        "positive": { "type": "boolean", "default": false },
+        "onTurnStart": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+        "onTurnEnd": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+        "modifiers": { "$ref": "#/$defs/modifiers" },
+        "skipTurn": { "type": "boolean" },
+        "preventMove": { "type": "boolean" },
+        "untargetable": { "type": "boolean", "description": "e.g. hidden: can't be targeted until it acts." },
+        "stacking": { "enum": ["refresh", "stack", "ignore"], "default": "refresh" },
+        "endsOn": { "type": "array", "items": { "enum": ["rest", "combatEnd", "act", "damaged"] } }
+      }
+    },
+
+    "terrain": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "symbol": { "type": "string", "minLength": 1, "maxLength": 1, "description": "Character used in map `tiles` strings." },
+        "image": { "$ref": "#/$defs/assetRef" },
+        "moveCost": { "type": "number", "default": 1, "description": "Use a negative number for impassable." },
+        "blocksSight": { "type": "boolean", "default": false },
+        "defenseBonus": { "type": "integer", "default": 0 },
+        "onEnter": { "type": "array", "items": { "$ref": "#/$defs/effect" } }
+      }
+    },
+
+    "modifiers": {
+      "type": "object",
+      "description": "Stat or derived-value key -> flat bonus (expression allowed).",
+      "additionalProperties": { "$ref": "#/$defs/expr" }
+    },
+
+    "class": {
+      "type": "object",
+      "required": ["id", "name", "baseStats", "hp"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "role": { "type": "string" },
+        "portrait": { "$ref": "#/$defs/assetRef" },
+        "token": { "$ref": "#/$defs/assetRef", "description": "Grid token image." },
+        "keyStats": { "type": "array", "items": { "type": "string" } },
+        "baseStats": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "hp": {
+          "type": "object",
+          "required": ["base", "perLevel"],
+          "additionalProperties": false,
+          "properties": { "base": { "type": "integer" }, "perLevel": { "$ref": "#/$defs/expr" } }
+        },
+        "move": { "type": "integer" },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "name": { "$ref": "#/$defs/text" },
+              "description": { "$ref": "#/$defs/text" },
+              "icon": { "$ref": "#/$defs/assetRef" }
+            }
+          }
+        },
+        "startingSkills": { "type": "array", "items": { "type": "string" } },
+        "startingItems": { "type": "array", "items": { "type": "string" } },
+        "basicAttack": { "type": "string", "description": "Skill id used as the always-available attack." }
+      }
+    },
+
+    "skill": {
+      "type": "object",
+      "required": ["id", "name", "tier", "classes"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "icon": { "$ref": "#/$defs/assetRef" },
+        "tier": { "type": "integer", "minimum": 1 },
+        "classes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["class"],
+            "additionalProperties": false,
+            "properties": { "class": { "type": "string" }, "branch": { "type": "string" } }
+          },
+          "description": "Every class (and branch in that class's tree) that can learn this skill. More than one entry = a shared skill."
+        },
+        "requires": { "$ref": "#/$defs/when", "description": "Must hold before the skill can appear in a level-up draw." },
+        "weight": { "type": "number", "minimum": 0, "default": 1, "description": "Multiplier on this skill's chance within its tier." },
+        "passive": { "type": "boolean", "default": false },
+        "modifiers": { "$ref": "#/$defs/modifiers", "description": "For passives: always-on bonuses." },
+        "checkBonus": {
+          "type": "object",
+          "description": "For passives: bonus to out-of-combat checks by stat or tag.",
+          "additionalProperties": { "type": "integer" }
+        },
+        "cost": { "type": "string", "description": "Action slot: move, action, bonus, or free." },
+        "cooldown": { "type": "integer", "minimum": 0, "description": "Rounds before it can be used again." },
+        "usesPerScenario": { "type": "integer", "minimum": 1 },
+        "usesPerCombat": { "type": "integer", "minimum": 1 },
+        "usableOutOfCombat": { "type": "boolean", "default": false },
+        "targeting": { "$ref": "#/$defs/targeting" },
+        "attack": {
+          "type": "object",
+          "description": "If present, an attack roll (d20 + stat vs defense) or a save gates the effects.",
+          "additionalProperties": false,
+          "properties": {
+            "roll": { "enum": ["attack", "save", "auto"], "default": "attack" },
+            "stat": { "type": "string" },
+            "saveStat": { "type": "string" },
+            "bonus": { "$ref": "#/$defs/expr" },
+            "halfOnSave": { "type": "boolean", "default": false }
+          }
+        },
+        "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+        "onMiss": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "vfx": { "$ref": "#/$defs/assetRef" },
+        "sfx": { "$ref": "#/$defs/assetRef" }
+      }
+    },
+
+    "targeting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "enum": ["self", "ally", "enemy", "any", "tile", "allAllies", "allEnemies"], "default": "enemy" },
+        "range": { "type": "integer", "minimum": 0, "description": "Squares. 1 = melee." },
+        "area": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shape": { "enum": ["single", "burst", "line", "cone", "ring"] },
+            "size": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "maxTargets": { "type": "integer", "minimum": 1 },
+        "lineOfSight": { "type": "boolean", "default": true },
+        "friendlyFire": { "type": "boolean", "default": false }
+      }
+    },
+
+    "effect": {
+      "description": "One step the engine applies. Shared by skills, items, conditions, terrain and card outcomes.",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "damage", "heal", "condition", "removeCondition", "push", "pull", "teleport", "move",
+            "summon", "modifyStat", "grant", "take", "setFlag", "clearFlag",
+            "insertCard", "removeCard", "shuffleIn", "goto", "startCombat", "startCheck",
+            "endScenario", "narrate", "resetCooldowns", "random"
+          ]
+        },
+        "target": {
+          "enum": ["targets", "self", "party", "roller", "chosen", "random", "allEnemies", "adjacent"],
+          "default": "targets"
+        },
+        "when": { "$ref": "#/$defs/when" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["damage", "heal"] } } },
+          "then": { "required": ["amount"], "properties": { "amount": { "$ref": "#/$defs/expr" }, "damageType": { "type": "string" } } } },
+        { "if": { "properties": { "type": { "enum": ["condition", "removeCondition"] } } },
+          "then": { "required": ["condition"], "properties": { "condition": { "type": "string" }, "duration": { "type": "integer" } } } },
+        { "if": { "properties": { "type": { "enum": ["push", "pull", "move", "teleport"] } } },
+          "then": { "properties": { "distance": { "$ref": "#/$defs/expr" } } } },
+        { "if": { "properties": { "type": { "const": "summon" } } },
+          "then": { "required": ["enemy"], "properties": { "enemy": { "type": "string" }, "count": { "$ref": "#/$defs/expr" }, "allied": { "type": "boolean" } } } },
+        { "if": { "properties": { "type": { "const": "modifyStat" } } },
+          "then": { "required": ["stat", "amount"], "properties": { "stat": { "type": "string" }, "amount": { "$ref": "#/$defs/expr" }, "duration": { "type": "integer", "description": "Rounds; omit for permanent." } } } },
+        { "if": { "properties": { "type": { "enum": ["grant", "take"] } } },
+          "then": { "properties": {
+            "xp": { "$ref": "#/$defs/expr" }, "gold": { "$ref": "#/$defs/expr" },
+            "item": { "type": "string" }, "loot": { "type": "string", "description": "A lootTable id." },
+            "skill": { "type": "string" }, "split": { "enum": ["each", "shared"], "default": "each" }
+          } } },
+        { "if": { "properties": { "type": { "enum": ["setFlag", "clearFlag"] } } },
+          "then": { "required": ["flag"], "properties": { "flag": { "type": "string" }, "scope": { "enum": ["scenario", "campaign"], "default": "campaign" } } } },
+        { "if": { "properties": { "type": { "enum": ["insertCard", "removeCard", "shuffleIn", "goto"] } } },
+          "then": { "required": ["card"], "properties": { "card": { "type": "string" }, "position": { "enum": ["top", "bottom", "random"], "default": "top" } } } },
+        { "if": { "properties": { "type": { "const": "startCombat" } } },
+          "then": { "required": ["combat"], "properties": { "combat": { "$ref": "#/$defs/combatSpec" } } } },
+        { "if": { "properties": { "type": { "const": "startCheck" } } },
+          "then": { "required": ["check"], "properties": { "check": { "$ref": "#/$defs/checkSpec" } } } },
+        { "if": { "properties": { "type": { "const": "endScenario" } } },
+          "then": { "required": ["result"], "properties": { "result": { "enum": ["victory", "defeat"] }, "unlock": { "type": "array", "items": { "type": "string" } } } } },
+        { "if": { "properties": { "type": { "const": "narrate" } } },
+          "then": { "required": ["text"], "properties": { "text": { "$ref": "#/$defs/text" }, "image": { "$ref": "#/$defs/assetRef" } } } },
+        { "if": { "properties": { "type": { "const": "random" } } },
+          "then": { "required": ["options"], "properties": { "options": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["effects"], "additionalProperties": false,
+              "properties": { "weight": { "type": "number" }, "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } } }
+            } } } } }
+      ]
+    },
+
+    "item": {
+      "type": "object",
+      "required": ["id", "name", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "icon": { "$ref": "#/$defs/assetRef" },
+        "kind": { "enum": ["equipment", "consumable", "quest"] },
+        "slot": { "enum": ["weapon", "offhand", "armor", "head", "feet", "trinket"] },
+        "rarity": { "enum": ["common", "uncommon", "rare", "legendary"], "default": "common" },
+        "price": { "type": "integer", "minimum": 0 },
+        "classes": { "type": "array", "items": { "type": "string" }, "description": "Restrict to these classes; omit for any." },
+        "modifiers": { "$ref": "#/$defs/modifiers" },
+        "grantsSkills": { "type": "array", "items": { "type": "string" } },
+        "use": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cost": { "type": "string" },
+            "targeting": { "$ref": "#/$defs/targeting" },
+            "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } }
+          }
+        }
+      }
+    },
+
+    "lootTable": {
+      "type": "object",
+      "required": ["id", "entries"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "rolls": { "$ref": "#/$defs/expr", "default": 1 },
+        "unique": { "type": "boolean", "default": true },
+        "entries": {
+          "type": "array",
+          "items": {
+            "allOf": [{ "$ref": "#/$defs/weighted" }],
+            "description": "id is an item id, or `gold` / `xp` with `count`."
+          }
+        }
+      }
+    },
+
+    "enemy": {
+      "type": "object",
+      "required": ["id", "name", "stats", "hp"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "token": { "$ref": "#/$defs/assetRef" },
+        "portrait": { "$ref": "#/$defs/assetRef" },
+        "size": { "type": "integer", "minimum": 1, "default": 1, "description": "Squares per side." },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "stats": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "hp": { "$ref": "#/$defs/expr", "description": "May scale, e.g. \"8+2*partyLevel\"." },
+        "defense": { "$ref": "#/$defs/expr" },
+        "move": { "type": "integer" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "resist": { "type": "object", "additionalProperties": { "type": "number" }, "description": "damageType -> multiplier (0.5 resist, 2 weak, 0 immune)." },
+        "behavior": {
+          "type": "array",
+          "description": "Ordered rules; the first whose `when` holds is the enemy's intent this round.",
+          "items": {
+            "type": "object",
+            "required": ["do"],
+            "additionalProperties": false,
+            "properties": {
+              "when": { "$ref": "#/$defs/when" },
+              "do": { "type": "string", "description": "Skill id, or `approach`, `flee`, `hold`." },
+              "target": { "enum": ["nearest", "lowestHp", "highestHp", "highestThreat", "random", "self", "weakestAlly"], "default": "nearest" }
+            }
+          }
+        },
+        "xp": { "type": "integer", "minimum": 0 },
+        "loot": { "type": "string", "description": "A lootTable id." }
+      }
+    },
+
+    "map": {
+      "type": "object",
+      "required": ["id", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "background": { "$ref": "#/$defs/assetRef" },
+        "tiles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "One string per row, one terrain `symbol` per square. `.` = floor by default."
+        },
+        "heroStart": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+        "spawnPoints": {
+          "type": "object",
+          "description": "Named spawn zones used by combat specs.",
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/point" } }
+        },
+        "exits": { "type": "array", "items": { "$ref": "#/$defs/point" } }
+      }
+    },
+    "point": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 2, "maxItems": 2 },
+
+    "combatSpec": {
+      "type": "object",
+      "required": ["map", "spawns"],
+      "additionalProperties": false,
+      "properties": {
+        "map": { "type": "string" },
+        "spawns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["enemy"],
+            "additionalProperties": false,
+            "properties": {
+              "enemy": { "type": "string" },
+              "count": { "$ref": "#/$defs/expr", "description": "May scale with partySize." },
+              "at": { "type": "string", "description": "spawnPoints key." },
+              "when": { "$ref": "#/$defs/when" },
+              "round": { "type": "integer", "minimum": 1, "description": "Reinforcements arriving on this round." }
+            }
+          }
+        },
+        "objective": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["defeatAll", "defeatTarget", "survive", "reachExit", "protect"], "default": "defeatAll" },
+            "target": { "type": "string" },
+            "rounds": { "type": "integer" }
+          }
+        },
+        "music": { "$ref": "#/$defs/assetRef" }
+      }
+    },
+
+    "checkSpec": {
+      "type": "object",
+      "required": ["stat", "dc"],
+      "additionalProperties": false,
+      "properties": {
+        "stat": {
+          "description": "Stat key, or a list the roller may choose from.",
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" }, "minItems": 1 }]
+        },
+        "dc": { "$ref": "#/$defs/expr" },
+        "mode": { "enum": ["individual", "each", "group", "best"], "default": "individual" },
+        "who": { "enum": ["volunteer", "random", "leader", "highestStat"], "default": "volunteer", "description": "For individual checks." },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1, "description": "Group mode override." },
+        "allowHelp": { "type": "boolean", "default": true },
+        "secret": { "type": "boolean", "default": false, "description": "Result shown only on the roller's phone." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "e.g. stealth, lore: passives can add bonuses by tag." }
+      }
+    },
+
+    "outcomes": { "type": "array", "items": { "$ref": "#/$defs/effect" } },
+
+    "card": {
+      "type": "object",
+      "required": ["id", "type", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["combat", "check", "choice", "story", "shop", "rest"] },
+        "title": { "$ref": "#/$defs/text" },
+        "text": { "$ref": "#/$defs/text" },
+        "image": { "$ref": "#/$defs/assetRef" },
+        "music": { "$ref": "#/$defs/assetRef" },
+        "requires": { "$ref": "#/$defs/when", "description": "If false when drawn, the card is discarded and the next is drawn." },
+        "tags": { "type": "array", "items": { "type": "string" } },
+
+        "combat": { "$ref": "#/$defs/combatSpec" },
+        "onVictory": { "$ref": "#/$defs/outcomes" },
+        "onDefeat": { "$ref": "#/$defs/outcomes" },
+
+        "check": { "$ref": "#/$defs/checkSpec" },
+        "onSuccess": { "$ref": "#/$defs/outcomes" },
+        "onFailure": { "$ref": "#/$defs/outcomes" },
+        "onCritical": { "$ref": "#/$defs/outcomes" },
+
+        "vote": { "enum": ["majority", "leader", "unanimous"], "default": "majority" },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "$ref": "#/$defs/text" },
+              "requires": { "$ref": "#/$defs/when" },
+              "check": { "$ref": "#/$defs/checkSpec" },
+              "onSuccess": { "$ref": "#/$defs/outcomes" },
+              "onFailure": { "$ref": "#/$defs/outcomes" },
+              "outcomes": { "$ref": "#/$defs/outcomes" }
+            }
+          }
+        },
+
+        "stock": { "type": "array", "items": { "$ref": "#/$defs/weighted" }, "description": "Shop inventory (item ids)." },
+        "priceModifier": { "$ref": "#/$defs/expr" },
+
+        "outcomes": { "$ref": "#/$defs/outcomes", "description": "Story/rest: applied after the card is read." }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "combat" } } }, "then": { "required": ["combat"] } },
+        { "if": { "properties": { "type": { "const": "check" } } }, "then": { "required": ["check"] } },
+        { "if": { "properties": { "type": { "const": "choice" } } }, "then": { "required": ["options"] } }
+      ]
+    },
+
+    "cardPool": {
+      "type": "object",
+      "required": ["id", "cards"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "cards": { "type": "array", "items": { "$ref": "#/$defs/weighted" } }
+      }
+    },
+
+    "deckEntry": {
+      "description": "A fixed card, or N weighted draws from a pool.",
+      "oneOf": [
+        { "type": "object", "required": ["card"], "additionalProperties": false, "properties": { "card": { "type": "string" } } },
+        {
+          "type": "object",
+          "required": ["pool"],
+          "additionalProperties": false,
+          "properties": {
+            "pool": { "type": "string" },
+            "draw": { "$ref": "#/$defs/expr", "default": 1 },
+            "shuffle": { "type": "boolean", "default": true }
+          }
+        }
+      ]
+    },
+
+    "scenario": {
+      "type": "object",
+      "required": ["id", "name", "deck"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/text" },
+        "intro": { "$ref": "#/$defs/text" },
+        "image": { "$ref": "#/$defs/assetRef" },
+        "music": { "$ref": "#/$defs/assetRef" },
+        "recommendedLevel": { "$ref": "#/$defs/range" },
+        "partySize": { "$ref": "#/$defs/range" },
+        "requires": { "$ref": "#/$defs/when" },
+        "deck": { "type": "array", "items": { "$ref": "#/$defs/deckEntry" } },
+        "onDeckEmpty": { "$ref": "#/$defs/outcomes", "description": "Default: endScenario victory." }
+      }
+    },
+
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/text" },
+        "intro": { "$ref": "#/$defs/text" },
+        "startingLevel": { "type": "integer", "minimum": 1, "default": 1 },
+        "startingGold": { "type": "integer", "minimum": 0, "default": 0 },
+        "startScenarios": { "type": "array", "items": { "type": "string" } },
+        "persistBetweenScenarios": {
+          "type": "array",
+          "items": { "enum": ["hp", "items", "gold", "xp", "conditions"] },
+          "default": ["items", "gold", "xp"]
+        }
+      }
+    }
+  }
+}

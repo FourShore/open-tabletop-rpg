@@ -1,0 +1,93 @@
+{
+  "items": [
+    { "id": "longsword", "name": "Longsword", "kind": "equipment", "slot": "weapon", "price": 15, "modifiers": { "attack": 1 } },
+    { "id": "oak-staff", "name": "Oak Staff", "kind": "equipment", "slot": "weapon", "price": 5, "modifiers": { "int": 1 } },
+    { "id": "shortbow", "name": "Shortbow", "kind": "equipment", "slot": "weapon", "price": 25 },
+    { "id": "mace", "name": "Mace", "kind": "equipment", "slot": "weapon", "price": 5 },
+    { "id": "dagger", "name": "Dagger", "kind": "equipment", "slot": "weapon", "price": 2 },
+    { "id": "rapier", "name": "Rapier", "kind": "equipment", "slot": "weapon", "price": 25 },
+    { "id": "lute", "name": "Lute", "kind": "equipment", "slot": "offhand", "price": 10, "classes": ["bard"], "modifiers": { "cha": 1 } },
+    { "id": "leather-armor", "name": "Leather Armor", "kind": "equipment", "slot": "armor", "price": 10, "modifiers": { "armor": 1 } },
+    { "id": "chain-mail", "name": "Chain Mail", "kind": "equipment", "slot": "armor", "price": 50, "modifiers": { "armor": 3, "dex": -1 } },
+    { "id": "healing-potion", "name": "Healing Potion", "kind": "consumable", "price": 20,
+      "use": { "cost": "bonus", "targeting": { "target": "self" }, "effects": [{ "type": "heal", "target": "self", "amount": "2d4+2" }] } },
+    { "id": "ring-of-warding", "name": "Ring of Warding", "kind": "equipment", "slot": "trinket", "rarity": "rare", "price": 150, "modifiers": { "defense": 1, "wis": 1 } },
+    { "id": "captains-sabre", "name": "Captain's Sabre", "kind": "equipment", "slot": "weapon", "rarity": "uncommon", "price": 80, "modifiers": { "attack": 1, "cha": 1 } }
+  ],
+  "lootTables": [
+    { "id": "loot.goblin", "rolls": 1, "entries": [
+      { "id": "gold", "weight": 6, "count": "1d6" },
+      { "id": "healing-potion", "weight": 2 },
+      { "id": "dagger", "weight": 1 }
+    ] },
+    { "id": "loot.captain", "rolls": 2, "entries": [
+      { "id": "gold", "weight": 4, "count": "3d10" },
+      { "id": "captains-sabre", "weight": 3 },
+      { "id": "healing-potion", "weight": 3, "count": 2 },
+      { "id": "ring-of-warding", "weight": 1, "when": { "level": { "min": 3 } } }
+    ] }
+  ],
+  "enemies": [
+    { "id": "goblin", "name": "Goblin", "token": "token.goblin", "tags": ["goblinoid"],
+      "stats": { "str": 1, "dex": 2, "int": 0, "wis": 0, "cha": 0 }, "hp": 6, "defense": 12, "move": 5,
+      "skills": ["stab"], "xp": 2, "loot": "loot.goblin",
+      "behavior": [
+        { "when": { "hpBelow": 0.3 }, "do": "flee" },
+        { "when": { "adjacentToEnemy": true }, "do": "stab", "target": "lowestHp" },
+        { "do": "approach", "target": "nearest" }
+      ] },
+    { "id": "goblin-archer", "name": "Goblin Archer", "token": "token.goblin-archer", "tags": ["goblinoid"],
+      "stats": { "str": 0, "dex": 3, "int": 0, "wis": 1, "cha": 0 }, "hp": 5, "defense": 11, "move": 5,
+      "skills": ["shoot"], "xp": 3, "loot": "loot.goblin",
+      "behavior": [
+        { "when": { "adjacentToEnemy": true }, "do": "flee" },
+        { "do": "shoot", "target": "lowestHp" }
+      ] },
+    { "id": "wolf", "name": "Grey Wolf", "token": "token.wolf", "tags": ["beast"],
+      "stats": { "str": 2, "dex": 3, "int": 0, "wis": 1, "cha": 0 }, "hp": 8, "defense": 12, "move": 7,
+      "skills": ["stab"], "xp": 3, "resist": { "cold": 0.5 },
+      "behavior": [
+        { "when": { "adjacentToEnemy": true }, "do": "stab", "target": "lowestHp" },
+        { "do": "approach", "target": "lowestHp" }
+      ] },
+    { "id": "bandit-captain", "name": "Bandit Captain Vessa", "token": "token.bandit-captain", "tags": ["human", "boss"],
+      "stats": { "str": 3, "dex": 3, "int": 1, "wis": 2, "cha": 3 }, "hp": "18 + 6 * partySize", "defense": 15, "move": 5,
+      "skills": ["strike", "dodge-roll", "inspire"], "xp": 20, "loot": "loot.captain",
+      "behavior": [
+        { "when": { "all": [{ "round": { "min": 2 } }, { "chance": 0.3 }] }, "do": "inspire", "target": "weakestAlly" },
+        { "when": { "adjacentToEnemy": true }, "do": "strike", "target": "highestThreat" },
+        { "do": "approach", "target": "nearest" }
+      ] }
+  ],
+  "maps": [
+    { "id": "forest-clearing", "name": "Forest Clearing", "width": 12, "height": 8, "background": "map.forest",
+      "tiles": [
+        "%%..........",
+        "%...^^......",
+        "....^.....%%",
+        "..........%.",
+        "~~~~..~~~~~~",
+        "......%.....",
+        ".^........%%",
+        "............"
+      ],
+      "heroStart": [[1, 7], [2, 7], [3, 7], [4, 7], [5, 7], [6, 7]],
+      "spawnPoints": { "north": [[3, 0], [5, 0], [7, 0], [9, 0]], "east": [[11, 3], [11, 5]] } },
+    { "id": "bandit-camp", "name": "Bandit Camp", "width": 14, "height": 10, "background": "map.camp",
+      "tiles": [
+        "##############",
+        "#............#",
+        "#..%.....%...#",
+        "#.....*......#",
+        "#............#",
+        "#..^......^..#",
+        "#............#",
+        "#....%.......#",
+        "#............#",
+        "######..######"
+      ],
+      "heroStart": [[5, 8], [6, 8], [7, 8], [8, 8], [6, 7], [7, 7]],
+      "spawnPoints": { "tent": [[6, 1]], "guards": [[3, 2], [10, 2], [4, 4], [9, 4]] },
+      "exits": [[6, 9], [7, 9]] }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "classes": [
+    {
+      "id": "knight", "name": "Knight", "role": "Front-line tank", "token": "token.knight",
+      "keyStats": ["str", "wis"], "baseStats": { "str": 4, "dex": 1, "int": 0, "wis": 2, "cha": 1 },
+      "hp": { "base": 14, "perLevel": 5 }, "move": 4,
+      "branches": [
+        { "id": "bulwark", "name": "Bulwark", "description": "Guard allies and soak damage." },
+        { "id": "vanguard", "name": "Vanguard", "description": "Charges and battlefield control." },
+        { "id": "oath", "name": "Oath", "description": "Auras that strengthen nearby allies." }
+      ],
+      "basicAttack": "strike", "startingSkills": ["strike", "shield-wall"], "startingItems": ["longsword", "chain-mail"]
+    },
+    {
+      "id": "wizard", "name": "Wizard", "role": "Area damage and control", "token": "token.wizard",
+      "keyStats": ["int"], "baseStats": { "str": 0, "dex": 1, "int": 4, "wis": 2, "cha": 1 },
+      "hp": { "base": 7, "perLevel": 3 }, "move": 5,
+      "branches": [
+        { "id": "evocation", "name": "Evocation", "description": "Fire and lightning." },
+        { "id": "frost", "name": "Frost", "description": "Slow, root and freeze." },
+        { "id": "arcana", "name": "Arcana", "description": "Teleports, wards and utility." }
+      ],
+      "basicAttack": "arcane-bolt", "startingSkills": ["arcane-bolt", "firebolt"], "startingItems": ["oak-staff"]
+    },
+    {
+      "id": "archer", "name": "Archer", "role": "Ranged single target", "token": "token.archer",
+      "keyStats": ["dex"], "baseStats": { "str": 1, "dex": 4, "int": 1, "wis": 2, "cha": 0 },
+      "hp": { "base": 9, "perLevel": 4 }, "move": 5,
+      "branches": [
+        { "id": "marksman", "name": "Marksman", "description": "Crits and long range." },
+        { "id": "volley", "name": "Volley", "description": "Hit many targets." },
+        { "id": "trapper", "name": "Trapper", "description": "Snares and terrain." }
+      ],
+      "basicAttack": "shoot", "startingSkills": ["shoot", "aimed-shot"], "startingItems": ["shortbow", "leather-armor"]
+    },
+    {
+      "id": "cleric", "name": "Cleric", "role": "Healer and support", "token": "token.cleric",
+      "keyStats": ["wis", "cha"], "baseStats": { "str": 2, "dex": 0, "int": 1, "wis": 4, "cha": 2 },
+      "hp": { "base": 10, "perLevel": 4 }, "move": 4,
+      "branches": [
+        { "id": "light", "name": "Light", "description": "Heals and cleansing." },
+        { "id": "judgement", "name": "Judgement", "description": "Smite the wicked and undead." },
+        { "id": "sanctuary", "name": "Sanctuary", "description": "Wards and revival." }
+      ],
+      "basicAttack": "mace-strike", "startingSkills": ["mace-strike", "healing-word"], "startingItems": ["mace", "chain-mail"]
+    },
+    {
+      "id": "rogue", "name": "Rogue", "role": "Burst damage and mobility", "token": "token.rogue",
+      "keyStats": ["dex", "cha"], "baseStats": { "str": 1, "dex": 4, "int": 1, "wis": 0, "cha": 2 },
+      "hp": { "base": 9, "perLevel": 4 }, "move": 6,
+      "branches": [
+        { "id": "shadow", "name": "Shadow", "description": "Stealth and repositioning." },
+        { "id": "blades", "name": "Blades", "description": "Backstabs and combos." },
+        { "id": "tricks", "name": "Tricks", "description": "Disarm, steal, distract." }
+      ],
+      "basicAttack": "stab", "startingSkills": ["stab", "backstab"], "startingItems": ["dagger", "leather-armor"]
+    },
+    {
+      "id": "bard", "name": "Bard", "role": "Buffs, debuffs and the party's face", "token": "token.bard",
+      "keyStats": ["cha"], "baseStats": { "str": 0, "dex": 2, "int": 2, "wis": 1, "cha": 4 },
+      "hp": { "base": 9, "perLevel": 4 }, "move": 5,
+      "branches": [
+        { "id": "valor", "name": "Valor", "description": "Party-wide buffs." },
+        { "id": "discord", "name": "Discord", "description": "Enemy debuffs." },
+        { "id": "lore", "name": "Lore", "description": "Skill-check and story bonuses." }
+      ],
+      "basicAttack": "rapier-thrust", "startingSkills": ["rapier-thrust", "inspire"], "startingItems": ["rapier", "lute"]
+    }
+  ]
+}

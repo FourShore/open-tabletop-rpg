@@ -1,0 +1,32 @@
+{
+  "$schema": "../schema/pack.schema.json",
+  "spec": "otrpg/0.1",
+  "id": "core.hollow-road",
+  "name": "The Hollow Road",
+  "version": "0.1.0",
+  "description": "Reference pack: six core classes, default leveling rules, and a short starter scenario.",
+  "authors": ["Zach"],
+  "license": "CC-BY-4.0",
+  "include": ["rules.json", "classes.json", "skills.json", "bestiary.json", "story.json"],
+  "assets": {
+    "img.road": { "path": "assets/images/hollow-road.webp", "type": "image" },
+    "img.ambush": { "path": "assets/images/ambush.webp", "type": "image" },
+    "img.shrine": { "path": "assets/images/shrine.webp", "type": "image" },
+    "img.bridge": { "path": "assets/images/bridge.webp", "type": "image" },
+    "img.camp": { "path": "assets/images/camp.webp", "type": "image" },
+    "map.forest": { "path": "assets/maps/forest-clearing.webp", "type": "image" },
+    "map.camp": { "path": "assets/maps/bandit-camp.webp", "type": "image" },
+    "token.knight": { "path": "assets/tokens/knight.png", "type": "sprite" },
+    "token.wizard": { "path": "assets/tokens/wizard.png", "type": "sprite" },
+    "token.archer": { "path": "assets/tokens/archer.png", "type": "sprite" },
+    "token.cleric": { "path": "assets/tokens/cleric.png", "type": "sprite" },
+    "token.rogue": { "path": "assets/tokens/rogue.png", "type": "sprite" },
+    "token.bard": { "path": "assets/tokens/bard.png", "type": "sprite" },
+    "token.goblin": { "path": "assets/tokens/goblin.png", "type": "sprite" },
+    "token.goblin-archer": { "path": "assets/tokens/goblin-archer.png", "type": "sprite" },
+    "token.wolf": { "path": "assets/tokens/wolf.png", "type": "sprite" },
+    "token.bandit-captain": { "path": "assets/tokens/bandit-captain.png", "type": "sprite" },
+    "music.road": { "path": "assets/audio/road.ogg", "type": "music" },
+    "music.battle": { "path": "assets/audio/battle.ogg", "type": "music" }
+  }
+}
