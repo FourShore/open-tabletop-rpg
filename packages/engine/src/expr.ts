@@ -11,6 +11,9 @@
 import type { Expr } from './types';
 import type { Rng } from './rng';
 
+const MAX_DICE = 100;
+const MAX_SIDES = 1000;
+
 export type Scope = Record<string, number>;
 
 type Node =
@@ -55,7 +58,13 @@ export function parseExpr(src: string): Node {
       return n;
     }
     const dice = /^(\d*)d(\d+)$/.exec(t);
-    if (dice) return { k: 'dice', count: dice[1] ? Number(dice[1]) : 1, sides: Number(dice[2]) };
+    if (dice) {
+      const count = dice[1] ? Number(dice[1]) : 1;
+      const sides = Number(dice[2]);
+      // Packs can come from anyone; keep a single roll cheap.
+      if (count > MAX_DICE || sides > MAX_SIDES || sides < 1) throw new ExprError(`Dice must be 1-${MAX_DICE} dice of 1-${MAX_SIDES} sides in "${src}"`);
+      return { k: 'dice', count, sides };
+    }
     if (/^\d*\.?\d+$/.test(t)) return { k: 'num', v: Number(t) };
     if (/^[A-Za-z_]/.test(t)) {
       if (peek() === '(') {

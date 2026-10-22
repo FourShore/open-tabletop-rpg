@@ -4,9 +4,10 @@
 import { existsSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { Server } from '@colyseus/core';
+import { randomUUID } from 'node:crypto';
+import { matchMaker, Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { indexPack, validatePack } from '@otrpg/engine';
+import { indexPack, validatePack, type Pack } from '@otrpg/engine';
 import { loadPackFromDisk, resolvePackPath } from '@otrpg/engine/node';
 import express from 'express';
 import { GameRoom } from './room';
@@ -15,6 +16,9 @@ export { GameRoom } from './room';
 export { MAX_HEROES, Table, TableError } from './table';
 export { readSave, SAVE_FORMAT, writeSave, type CampaignSave } from './save';
 export type * from './view';
+
+/** Largest pack a player can bring, as JSON. */
+const MAX_PACK_BYTES = '2mb';
 
 export interface ServerConfig {
   /** Path to the pack manifest (pack.json). */
@@ -37,6 +41,51 @@ export async function createGameServer(config: ServerConfig) {
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, pack: pack.id });
   });
+  // A table for a pack the player brings: from a URL (fetched by their browser, so
+  // the server never fetches anything) or from the editor. It is checked like a
+  // pack on disk, then lives only as long as its table.
+  // The web app may be served from elsewhere (VITE_SERVER_URL); these routes hold nothing private.
+  app.use(['/tables', '/save'], (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') res.status(204).end();
+    else next();
+  });
+  app.post('/tables', express.json({ limit: MAX_PACK_BYTES }), async (req, res) => {
+    const { pack, baseUrl } = (req.body ?? {}) as { pack?: Pack; baseUrl?: unknown };
+    if (!pack || typeof pack !== 'object') {
+      res.status(400).json({ error: 'Send a pack' });
+      return;
+    }
+    const problems = validatePack(pack);
+    if (problems.length) {
+      res.status(400).json({ error: `The pack has ${problems.length} problem(s)`, issues: problems.slice(0, 50) });
+      return;
+    }
+    let assetBase: string | undefined;
+    if (typeof baseUrl === 'string') {
+      try {
+        const u = new URL(baseUrl);
+        if (u.protocol === 'https:' || u.protocol === 'http:') assetBase = u.href;
+      } catch {
+        // No assets, then.
+      }
+    }
+    const key = randomUUID();
+    GameRoom.customPacks.set(key, { index: indexPack(pack), assetBase });
+    try {
+      const room = await matchMaker.createRoom('table', { customPack: key });
+      res.json({ code: room.roomId });
+    } finally {
+      GameRoom.customPacks.delete(key);
+    }
+  });
+
+  app.use('/tables', ((err, _req, res, _next) => {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: status === 413 ? 'That pack is too big (2 MB at most)' : status === 400 ? "That pack isn't valid JSON" : 'Something went wrong on the server' });
+  }) as express.ErrorRequestHandler);
+
   // The campaign so far, as a file to keep. Anyone with the table code can join it, so they can save it too.
   app.get('/save/:code', (req, res) => {
     const save = GameRoom.tables.get(req.params.code.toUpperCase())?.save();

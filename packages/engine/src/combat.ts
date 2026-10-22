@@ -131,15 +131,24 @@ export function createCombat(c: CombatCtx, cardId: string, spec: CombatSpec): Co
   return cs;
 }
 
+/** Most enemies one spawn entry or summon can bring at once. */
+const MAX_SPAWN = 40;
+
 function spawn(c: CombatCtx, cs: CombatState, enemyId: string, count: number, at?: string, near?: Point): void {
   const { index } = c;
   const def = enemyDef(index, enemyId);
   const map = mapOf(index, cs.map);
   const points = at ? (map.spawnPoints?.[at] ?? []) : [];
   const scope = partyScope(c);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < Math.min(count, MAX_SPAWN); i++) {
     const want: Point = near ?? points[i % Math.max(1, points.length)] ?? [Math.floor(map.width / 2), 0];
-    const pos = freeNear(c, cs, want);
+    let pos: Point;
+    try {
+      pos = freeNear(c, cs, want);
+    } catch {
+      // A full map takes no more enemies.
+      return;
+    }
     const hp = Math.max(1, evalInt(def.hp, scope, c.rng));
     const sameKind = cs.units.filter((u) => u.enemyId === enemyId).length;
     const name = text(def.name) + (count > 1 || sameKind > 0 ? ` ${sameKind + 1}` : '');

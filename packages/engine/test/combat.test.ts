@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dist } from '../src/combat';
 import { act, GameError, newGame, startScenario, waitingOn, type Action, type GameState } from '../src/game';
-import type { PackIndex } from '../src/pack';
+import { indexPack, type PackIndex } from '../src/pack';
 import { heroCombatOptions, suggestCombatAction } from '../src/tactics';
 import type { Point } from '../src/types';
 import { exampleIndex, PARTY } from './helpers';
@@ -53,6 +53,16 @@ describe('combat setup', () => {
     const s = fight('wolf-pack');
     expect(s.combat!.units.filter((u) => u.side === 'hero').map((u) => u.actionsLeft)).toEqual([2, 2, 2]);
     expect(waitingOn(s)).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('caps a spawn, and stops when the map is full', () => {
+    const tiny = { ...index.pack, maps: index.pack.maps!.map((m) => (m.id === 'forest-clearing' ? { ...m, width: 4, height: 4, tiles: undefined, heroStart: [[0, 3], [1, 3], [2, 3]] as Point[], spawnPoints: { north: [[0, 0]] as Point[], east: [[3, 0]] as Point[] } } : m)) };
+    const flood = { ...tiny, cards: tiny.cards!.map((c) => (c.id === 'wolf-pack' ? { ...c, combat: { ...c.combat!, spawns: [{ enemy: 'wolf', count: '1000000', at: 'east' }] } } : c)) };
+    const big = indexPack(flood);
+    const s = startScenario(big, newGame(big, { seed: 1, players: PARTY }), 'hollow-road-1').state;
+    const r = act(big, { ...s, deck: ['wolf-pack'], scenarioFlags: [] }, { type: 'next' });
+    // 16 squares, 3 heroes: 13 wolves at most.
+    expect(r.state.combat!.units.filter((u) => u.side === 'enemy')).toHaveLength(13);
   });
 
   it('holds reinforcements until their round', () => {

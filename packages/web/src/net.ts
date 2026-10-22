@@ -38,8 +38,29 @@ function randomId(): string {
 /** A room created on the home page, handed to the page we navigate to so it doesn't join twice. */
 let handoff: { room: Room; role: Role; view?: View } | undefined;
 
-export async function createTable(role: Role): Promise<string> {
-  const room = await client.create('table', { token: deviceToken(role), role });
+/** A pack the player brought instead of the server's own. */
+export interface CustomPack {
+  pack: unknown;
+  /** The pack.json URL, so asset paths resolve next to it. */
+  baseUrl?: string;
+}
+
+/** Thrown when the server turns a table down, with its reason. */
+export class TableRefused extends Error {}
+
+export async function createTable(role: Role, custom?: CustomPack): Promise<string> {
+  let room: Room;
+  if (custom) {
+    const res = await fetch(`${SERVER_URL}/tables`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(custom) });
+    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string; issues?: { path: string; message: string }[] };
+    if (!res.ok || !body.code) {
+      const first = body.issues?.[0];
+      throw new TableRefused([body.error ?? `The server answered ${res.status}`, first && `${first.path}: ${first.message}`].filter(Boolean).join('. '));
+    }
+    room = await client.joinById(body.code, { token: deviceToken(role), role });
+  } else {
+    room = await client.create('table', { token: deviceToken(role), role });
+  }
   const h: NonNullable<typeof handoff> = { room, role };
   // The first view can arrive before the next page mounts; keep it.
   room.onMessage('view', (v: View) => (h.view = v));

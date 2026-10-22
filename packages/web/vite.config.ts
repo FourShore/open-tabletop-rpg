@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    proxy: { '/pack': 'http://localhost:2567' },
+    proxy: { '/pack': 'http://localhost:2567', '/save': 'http://localhost:2567', '/tables': 'http://localhost:2567' },
   },
 });
