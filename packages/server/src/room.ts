@@ -20,12 +20,21 @@ export interface JoinOptions {
   role?: 'screen' | 'controller';
 }
 
+/** A pack someone brought (see POST /tables), waiting for its room to be created. */
+export interface CustomPack {
+  index: PackIndex;
+  /** Where the pack's asset paths resolve, e.g. the URL its pack.json was fetched from. */
+  assetBase?: string;
+}
+
 export class GameRoom extends Room {
   /** Set once at startup by createGameServer. */
   static index: PackIndex;
   static seed?: number;
   /** Open tables by code, for the save download. */
   static tables = new Map<string, Table>();
+  /** Custom packs handed over by POST /tables, by a one-time key passed in the create options. */
+  static customPacks = new Map<string, CustomPack>();
 
   maxClients = 32;
   autoDispose = false;
@@ -33,13 +42,15 @@ export class GameRoom extends Room {
   private tokenOf = new Map<string, string>();
   private emptyTimer?: { clear(): void };
 
-  onCreate() {
+  onCreate(options?: { customPack?: string }) {
+    const custom = options?.customPack ? GameRoom.customPacks.get(options.customPack) : undefined;
+    if (options?.customPack) GameRoom.customPacks.delete(options.customPack);
     let code: string;
     do code = Array.from({ length: 4 }, () => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join('');
     while (activeCodes.has(code));
     activeCodes.add(code);
     this.roomId = code;
-    this.table = new Table(GameRoom.index, { code, seed: GameRoom.seed });
+    this.table = new Table(custom?.index ?? GameRoom.index, { code, seed: GameRoom.seed, assetBase: custom?.assetBase });
     GameRoom.tables.set(code, this.table);
 
     const handle = (type: string, fn: (token: string, msg: Record<string, unknown>) => void) =>
@@ -63,6 +74,8 @@ export class GameRoom extends Room {
     handle('start', (t) => this.table.start(t));
     handle('lobby', (t) => this.table.toLobby(t));
     handle('act', (t, m) => this.table.act(t, m.action));
+    // A table made over HTTP may never be joined; don't keep it forever.
+    this.emptyTimer = this.clock.setTimeout(() => this.disconnect(), EMPTY_TIMEOUT_MS);
   }
 
   onJoin(client: Client, options: JoinOptions) {

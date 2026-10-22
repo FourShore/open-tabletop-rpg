@@ -2,6 +2,7 @@
 
 import { Client, type Room } from 'colyseus.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadPackFromDisk } from '@otrpg/engine/node';
 import { createGameServer, type View } from '../src/index';
 
 const EXAMPLE_PACK = new URL('../../../spec/example-pack/pack.json', import.meta.url).pathname;
@@ -80,6 +81,34 @@ describe('game room', () => {
     await until(() => benHero().online);
 
     for (const d of [screen, ana, back]) await d.room.leave();
+  });
+
+  it('opens a table for a pack a player brings, with its assets from where it came', async () => {
+    const pack = await loadPackFromDisk(EXAMPLE_PACK);
+    const custom = { ...pack, id: 'fan.road', name: 'Fan Road' };
+    const post = (body: unknown) =>
+      fetch(`http://localhost:${server.port}/tables`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+    const res = await post({ pack: custom, baseUrl: 'https://example.org/packs/fan/pack.json' });
+    expect(res.status).toBe(200);
+    const { code } = await res.json();
+    expect(code).toMatch(/^[A-Z]{4}$/);
+    const phone = watch(await client.joinById(code, { token: 'fan', role: 'controller' }));
+    await until(() => phone.view !== undefined);
+    expect(phone.view!.packName).toBe('Fan Road');
+    phone.room.send('addHero', { name: 'Fan', classId: 'knight' });
+    phone.room.send('start');
+    phone.room.send('act', { action: { type: 'next' } });
+    await until(() => phone.view?.card !== undefined);
+    expect(phone.view!.card!.image).toBe('https://example.org/packs/fan/assets/images/hollow-road.webp');
+    await phone.room.leave();
+
+    const bad = await post({ pack: { ...custom, classes: [{ id: 'x' }] } });
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).issues.length).toBeGreaterThan(0);
+    const huge = await post({ pack: { ...custom, description: 'x'.repeat(3_000_000) } });
+    expect(huge.status).toBe(413);
+    expect((await huge.json()).error).toMatch(/too big/);
   });
 
   it('rejects joining a code that does not exist', async () => {

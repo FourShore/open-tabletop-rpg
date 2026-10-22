@@ -1,0 +1,14 @@
+{
+  "$comment": "Packs listed on the home page. Add yours with a pull request: a pack.json URL whose host allows cross-origin requests (GitHub raw and GitHub Pages do).",
+  "packs": [
+    {
+      "id": "core.hollow-road",
+      "name": "The Hollow Road",
+      "description": "Merchants vanish on the road to Ashford. Two chapters of ambushes, hard choices and a crypt beneath an abbey. The example pack.",
+      "author": "Open Tabletop RPG",
+      "license": "CC-BY-4.0",
+      "players": "1-6",
+      "builtin": true
+    }
+  ]
+}

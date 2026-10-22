@@ -66,4 +66,14 @@ Key conventions
 - **Level-ups** can be widened with the `levelUpTiles` modifier and rerolled
   for gold with `rules.leveling.reroll`.
 
+## Sharing a pack
+
+Host the pack's files anywhere that serves them with cross-origin requests
+allowed (GitHub raw or GitHub Pages work) and share its `pack.json` URL. Any
+table can then play it from the home page, and `spec/gallery.json` lists packs
+on the home page. Packs from a URL are checked against this schema before a
+table opens, and a few limits keep a bad pack from harming the server: maps
+are at most 64 squares on a side, a dice roll is at most 100 dice of 1000
+sides, one spawn brings at most 40 enemies, and the whole pack is at most 2 MB.
+
 Licensed CC BY 4.0, see [LICENSE.md](LICENSE.md).

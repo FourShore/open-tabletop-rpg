@@ -622,3 +622,135 @@ label.file {
 .end-actions {
   margin-bottom: 1rem;
 }
+
+/* pack picker */
+.packs .chosen {
+  margin-top: 0;
+}
+.gallery {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.gallery button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+.gallery button.selected,
+.editor-nav button.selected,
+.editor-list button.selected {
+  border-color: var(--gold);
+  background: #3a2f1c;
+}
+.error ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+/* editor */
+.editor {
+  padding: 1rem;
+  max-width: 110rem;
+  margin: 0 auto;
+}
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+.editor-head input {
+  width: 16rem;
+}
+.editor-body {
+  display: grid;
+  grid-template-columns: 11rem 14rem minmax(0, 1fr) 20rem;
+  gap: 1rem;
+  align-items: start;
+}
+.editor-nav,
+.editor-list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.editor-nav button,
+.editor-list button {
+  text-align: left;
+  min-height: 40px;
+  padding: 0.45rem 0.7rem;
+}
+.editor-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+  max-height: 70vh;
+  overflow: auto;
+}
+.editor-list li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  overflow-wrap: anywhere;
+}
+.json-field textarea {
+  width: 100%;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  resize: vertical;
+}
+.issues {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+.issues button {
+  text-align: left;
+  min-height: 0;
+  padding: 0.35rem 0.5rem;
+  width: 100%;
+}
+.issues code {
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+.ok {
+  color: var(--green);
+}
+.tag.red {
+  border-color: var(--red);
+  color: var(--red);
+}
+.card.preview {
+  margin: 0 0 1rem;
+}
+.map-preview {
+  margin: 0 0 1rem;
+  max-width: 32rem;
+}
+@media (max-width: 900px) {
+  .editor-body {
+    grid-template-columns: 1fr;
+  }
+}

@@ -10,6 +10,14 @@ describe('expressions', () => {
     expect(evalExpr('-2 + 5', {}).value).toBe(3);
   });
 
+  it('keeps dice within sane limits, since packs come from anyone', () => {
+    const rng = createRng(1);
+    expect(() => evalExpr('100d1000', {}, rng)).not.toThrow();
+    expect(() => evalExpr('1000000d6', {}, rng)).toThrow(ExprError);
+    expect(() => evalExpr('2d100000', {}, rng)).toThrow(ExprError);
+    expect(() => evalExpr('2d0', {}, rng)).toThrow(ExprError);
+  });
+
   it('supports functions', () => {
     expect(evalExpr('max(1, floor(partySize / 2))', { partySize: 1 }).value).toBe(1);
     expect(evalExpr('ceil(7 / 2) + min(3, 9)', {}).value).toBe(7);

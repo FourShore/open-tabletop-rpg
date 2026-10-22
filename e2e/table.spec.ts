@@ -141,3 +141,49 @@ test('an unknown code shows a friendly page', async ({ page }) => {
   await page.goto('/play/QQQQ');
   await expect(page.getByRole('heading', { name: /no table qqqq/i })).toBeVisible();
 });
+
+test('a pack loaded by URL hosts a table, and a shared ?pack= link picks it', async ({ page, baseURL }) => {
+  const url = `${baseURL}/pack/pack.json`;
+  await page.goto('/');
+  await page.getByLabel('Pack URL').fill(`${baseURL}/pack/nope.json`);
+  await page.getByRole('button', { name: 'Load' }).click();
+  await expect(page.getByRole('alert')).toContainText('answered 404');
+  await page.goto(`/?pack=${encodeURIComponent(url)}`);
+  await expect(page.getByLabel('Pack URL')).toHaveValue(url);
+  // The gallery's built-in entry is no longer the pick once the URL pack loads.
+  await expect(page.getByRole('button', { name: /The Hollow Road/, pressed: false })).toBeVisible();
+  await page.getByRole('button', { name: /start a solo table/i }).click();
+  await expect(page).toHaveURL(/\/play\/[A-Z]{4}$/);
+  await expect(page.getByLabel('Hero name')).toBeVisible();
+});
+
+test('the editor checks a pack as you type and playtests it', async ({ page }) => {
+  await page.goto('/editor');
+  await page.getByRole('button', { name: 'Open The Hollow Road' }).click();
+  await expect(page.getByText('No problems. Ready to playtest.')).toBeVisible();
+
+  await page.getByRole('button', { name: /^Cards/ }).click();
+  await page.getByRole('button', { name: 'bandit-scout' }).click();
+  const box = page.getByLabel('Entry JSON');
+  const json = JSON.parse(await box.inputValue());
+  await box.fill(JSON.stringify({ ...json, title: 'A Nervous Scout', options: [{ ...json.options[0], onFailure: [{ type: 'insertCard', card: 'no-such-card' }] }] }, null, 2));
+  await expect(page.locator('.card.preview h2')).toHaveText('A Nervous Scout');
+  await expect(page.locator('.editor-issues')).toContainText('no-such-card');
+  await expect(page.getByRole('button', { name: 'Playtest' })).toBeDisabled();
+
+  // Half-typed JSON is held back rather than saved.
+  await box.fill('{ "id": ');
+  await expect(page.getByText(/Not saved yet/)).toBeVisible();
+  await box.fill(JSON.stringify({ ...json, title: 'A Nervous Scout' }, null, 2));
+  await expect(page.getByText('No problems. Ready to playtest.')).toBeVisible();
+
+  // The draft survives a reload.
+  await page.reload();
+  await page.getByRole('button', { name: /^Cards/ }).click();
+  await page.getByRole('button', { name: 'bandit-scout' }).click();
+  await expect(page.locator('.card.preview h2')).toHaveText('A Nervous Scout');
+
+  await page.getByRole('button', { name: 'Playtest' }).click();
+  await expect(page).toHaveURL(/\/play\/[A-Z]{4}$/);
+  await expect(page.getByLabel('Hero name')).toBeVisible();
+});

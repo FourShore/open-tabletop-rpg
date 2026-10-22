@@ -34,6 +34,22 @@ offers **Resume your last campaign**. Heroes from a save wait in the lobby
 until a phone taps **Play as ...**; the same button lets a new phone take over
 a hero whose phone is gone.
 
+### Other adventures
+
+The home page lists packs from [spec/gallery.json](spec/gallery.json) and
+takes any `pack.json` URL. The browser fetches the pack and its includes (the
+host must allow cross-origin requests, as GitHub raw and GitHub Pages do),
+checks it, and hands it to the server with the new table; asset paths resolve
+next to the pack's URL. A link like `/?pack=https://…/pack.json` opens the
+home page with that pack chosen, so a pack can be shared as one link. To list
+yours in the gallery, open a pull request adding it to `spec/gallery.json`.
+
+The **pack editor** (`/editor`) opens the built-in pack, a URL or a file. Every
+entry is editable as JSON, the validator runs as you type (click a problem to
+jump to it), cards and maps have previews, and **Playtest** starts a solo
+table with your draft. **Download pack.json** saves it as one file. The draft
+stays in your browser.
+
 For production, `npm run build && npm start` serves everything from one port
 (`PORT`, default 2567). `render.yaml` deploys it to Render as a single service.
 Tables live in memory: a server restart ends running scenarios, but the
@@ -50,8 +66,8 @@ campaign survives in the saved file.
 - `packages/server`: Colyseus rooms joined by code. Each device keeps a token
   in localStorage, so a phone that reloads gets its heroes back. The screen
   and each phone get their own view (secret rolls only reach the roller).
-- `packages/web`: Vite + React app with the home page, the main screen and
-  the phone controller.
+- `packages/web`: Vite + React app with the home page and pack picker, the
+  main screen, the phone controller and the pack editor.
 
 ```
 npm test                                   # unit tests
@@ -67,7 +83,7 @@ npm run play -- --auto --seed 42           # watch it play itself
 2. Rooms: main screen and phone controllers over WebSockets (done)
 3. Grid combat (done)
 4. Progression: inventory, shop UI, campaign saves (done)
-5. Open ecosystem: pack loading by URL, a pack gallery, an editor
+5. Open ecosystem: pack loading by URL, a pack gallery, an editor (done)
 
 ## License
 

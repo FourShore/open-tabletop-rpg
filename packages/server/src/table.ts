@@ -63,6 +63,8 @@ interface LogEntry extends LogLine {
 export interface TableOptions {
   code: string;
   seed?: number;
+  /** Absolute base URL for the pack's assets. Without it they are served from /pack. */
+  assetBase?: string;
 }
 
 /** Actions any phone may send: they move the table along without speaking for a hero. */
@@ -98,6 +100,7 @@ export class Table {
   private shownCard?: string;
   private nextLog = 1;
   private seed: number;
+  private assetBase?: string;
 
   constructor(
     readonly index: PackIndex,
@@ -105,6 +108,7 @@ export class Table {
   ) {
     this.code = opts.code;
     this.seed = opts.seed ?? (Math.random() * 2 ** 32) >>> 0;
+    this.assetBase = opts.assetBase;
     this.scenarioId = this.scenarios()[0]?.id ?? '';
   }
 
@@ -364,7 +368,14 @@ export class Table {
   /** Map an asset key from the pack to a URL the browser can load. */
   private asset(key: string | undefined): string | undefined {
     const a = key ? this.index.pack.assets?.[key] : undefined;
-    return a ? `/pack/${a.path}` : undefined;
+    if (!a) return undefined;
+    if (!this.assetBase) return `/pack/${a.path}`;
+    try {
+      const url = new URL(a.path, this.assetBase);
+      return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

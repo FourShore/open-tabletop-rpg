@@ -40,6 +40,44 @@ export async function loadPack(readJson: (relPath: string) => Promise<Fragment>,
   return mergePack(root, fragments);
 }
 
+/** Most fragment files a pack fetched by URL may include. */
+const MAX_INCLUDES = 64;
+/** Largest JSON file a pack fetched by URL may have. */
+const MAX_FILE_BYTES = 2_000_000;
+
+/**
+ * Load a pack from the URL of its pack.json, fetching its includes next to it.
+ * Works in browsers (the host must allow CORS, as GitHub raw and Pages do) and Node.
+ */
+export async function loadPackFromUrl(url: string, fetchFn: typeof fetch = fetch): Promise<Pack> {
+  let root: URL;
+  try {
+    root = new URL(url);
+  } catch {
+    throw new Error(`'${url}' is not a URL`);
+  }
+  if (root.protocol !== 'https:' && root.protocol !== 'http:') throw new Error('Packs load over http or https');
+  let files = 0;
+  return loadPack(async (rel) => {
+    if (++files > MAX_INCLUDES + 1) throw new Error(`A pack can include at most ${MAX_INCLUDES} files`);
+    const at = new URL(rel, root);
+    let res: Response;
+    try {
+      res = await fetchFn(at.href);
+    } catch {
+      throw new Error(`Couldn't fetch ${at.href} (is the host allowing cross-origin requests?)`);
+    }
+    if (!res.ok) throw new Error(`${at.href} answered ${res.status}`);
+    const body = await res.text();
+    if (body.length > MAX_FILE_BYTES) throw new Error(`${at.href} is too big`);
+    try {
+      return JSON.parse(body) as Fragment;
+    } catch {
+      throw new Error(`${at.href} isn't valid JSON`);
+    }
+  }, root.href);
+}
+
 /** Lookup tables built once per pack. */
 export interface PackIndex {
   pack: Pack;
