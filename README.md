@@ -22,9 +22,22 @@ phones, make a hero, and anyone can start. **Play solo** runs a whole party
 from one device. Remote players can join the same code from anywhere and open
 the main screen in their own browser.
 
+Between cards each phone has a **Gear and items** panel: swap equipment,
+drink a potion, or use a skill that works outside a fight. When a scenario
+ends the party keeps its levels, gold and gear, and the next start carries on
+into the scenario a win unlocked.
+
+There are no accounts. A campaign is a small save file: **Download save** on
+the main screen or a phone, and **Load a save file** in a lobby. The main
+screen and phones also remember the latest save for the pack, so a new table
+offers **Resume your last campaign**. Heroes from a save wait in the lobby
+until a phone taps **Play as ...**; the same button lets a new phone take over
+a hero whose phone is gone.
+
 For production, `npm run build && npm start` serves everything from one port
 (`PORT`, default 2567). `render.yaml` deploys it to Render as a single service.
-Tables live in memory, so a server restart ends running games for now.
+Tables live in memory: a server restart ends running scenarios, but the
+campaign survives in the saved file.
 
 ## Packages
 
@@ -53,7 +66,7 @@ npm run play -- --auto --seed 42           # watch it play itself
 1. Engine + spec (done)
 2. Rooms: main screen and phone controllers over WebSockets (done)
 3. Grid combat (done)
-4. Progression: inventory, shop UI, campaign saves
+4. Progression: inventory, shop UI, campaign saves (done)
 5. Open ecosystem: pack loading by URL, a pack gallery, an editor
 
 ## License

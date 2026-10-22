@@ -18,14 +18,18 @@ export const PARTY: PlayerSpec[] = [
 
 /** Play a scenario to the end, making random but legal choices. */
 export function autoPlay(index: PackIndex, seed: number, players = PARTY, scenario = 'hollow-road-1') {
+  const r = startScenario(index, newGame(index, { seed, players }), scenario);
+  const out = playOut(index, r.state, seed);
+  return { state: out.state, log: [...r.events, ...out.log] };
+}
+
+/** Play an already started scenario to the end, making random but legal choices. */
+export function playOut(index: PackIndex, start: GameState, seed: number) {
   const pick = createRng(seed + 1);
-  let state = newGame(index, { seed, players });
+  let state = start;
   const log: GameEvent[] = [];
-  let r = startScenario(index, state, scenario);
-  state = r.state;
-  log.push(...r.events);
   for (let guard = 0; (state.phase === 'playing' || state.pending) && guard < 3000; guard++) {
-    r = act(index, state, chooseAction(index, state, pick.next.bind(pick)));
+    const r = act(index, state, chooseAction(index, state, pick.next.bind(pick)));
     state = r.state;
     log.push(...r.events);
   }

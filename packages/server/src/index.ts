@@ -13,6 +13,7 @@ import { GameRoom } from './room';
 
 export { GameRoom } from './room';
 export { MAX_HEROES, Table, TableError } from './table';
+export { readSave, SAVE_FORMAT, writeSave, type CampaignSave } from './save';
 export type * from './view';
 
 export interface ServerConfig {
@@ -35,6 +36,18 @@ export async function createGameServer(config: ServerConfig) {
   const app = express();
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, pack: pack.id });
+  });
+  // The campaign so far, as a file to keep. Anyone with the table code can join it, so they can save it too.
+  app.get('/save/:code', (req, res) => {
+    const save = GameRoom.tables.get(req.params.code.toUpperCase())?.save();
+    if (!save) {
+      res.status(404).json({ error: 'Nothing to save yet' });
+      return;
+    }
+    const name = `${pack.id}-${save.savedAt.slice(0, 10)}.json`.replace(/[^\w.-]/g, '-');
+    res.setHeader('Cache-Control', 'no-store');
+    if ('download' in req.query) res.attachment(name);
+    res.json(save);
   });
   app.use('/pack', express.static(path.dirname(resolvePackPath(config.pack))), (_req, res) => {
     // Packs often reference art that isn't drawn yet; the client hides missing images.

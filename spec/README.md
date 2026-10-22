@@ -53,6 +53,15 @@ Key conventions
   and rolls its `loot`; the card's `onVictory` rewards come on top.
 - **Durations** count cards outside combat and rounds inside it; a condition
   gained in a fight ends with the fight.
+- **Between cards** (no prompt open, or in a shop) a hero can equip and
+  unequip gear, use an item with a `use` block, and use a skill marked
+  `usableOutOfCombat`, once per card. Only `self`, `ally`, `any` and
+  `allAllies` targeting works outside a fight; amounts use the user's stats.
+- **Campaigns** carry the party from one scenario to the next.
+  `campaign.persistBetweenScenarios` lists what heroes keep (`xp` also keeps
+  level, stats and skills); anything left out goes back to how a new hero of
+  the class starts. Unlisted `hp` means a full heal and unlisted `conditions`
+  clears them. Campaign flags and unlocked scenarios always carry over.
 - **Stats have no cap** unless `rules.statCap` sets one; scale DCs instead.
 - **Level-ups** can be widened with the `levelUpTiles` modifier and rerolled
   for gold with `rules.leveling.reroll`.

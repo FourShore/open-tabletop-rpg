@@ -192,19 +192,126 @@ describe('play', () => {
     expect(last('ana')).toMatch(/14 vs DC 12/);
   });
 
-  it('starts a fresh run with the same heroes, or goes back to the lobby', () => {
+  it('lets a phone swap gear and drink a potion between cards', () => {
     const t = table();
     const a = t.addHero('ana', 'Ana', 'knight');
     t.start('ana');
-    expect(() => t.start('ana')).toThrow(/running/);
-    playOut(t, { [a]: 'ana' });
+    const st = (t as unknown as { state: GameState }).state;
+    st.party[0].inventory.push('healing-potion', 'captains-sabre');
+    st.party[0].hp = 3;
+    let hero = t.viewFor('ana').heroes[0];
+    expect(hero.inventory.map((i) => [i.name, i.equippable])).toEqual([['Healing Potion', false], ["Captain's Sabre", true]]);
+    expect(hero.equipment.find((e) => e.slot === 'weapon')?.details).toBe('Weapon · +1 attack');
+    expect(hero.uses.map((u) => u.name)).toEqual(['Healing Potion']);
+    expect(() => t.act('ben', { type: 'equip', playerId: a, itemId: 'captains-sabre' })).toThrow(/not yours/);
+    t.act('ana', { type: 'equip', playerId: a, itemId: 'captains-sabre' });
+    t.act('ana', { type: 'useItem', playerId: a, itemId: 'healing-potion' });
+    hero = t.viewFor('ana').heroes[0];
+    expect(hero.equipment.find((e) => e.slot === 'weapon')?.name).toBe("Captain's Sabre");
+    expect(hero.hp).toBeGreaterThan(3);
+    expect(t.viewFor('screen').log.at(-2)?.text).toBe('Ana uses Healing Potion.');
+  });
+});
+
+/** Play until a win, starting fresh each time it ends in defeat. */
+function winChapterOne(t: Table, owners: Record<string, string>) {
+  for (let i = 0; i < 20; i++) {
+    playOut(t, owners);
+    if (t.viewFor('screen').result === 'victory') return;
+    t.toLobby(Object.values(owners)[0]);
+    t.newCampaign(Object.values(owners)[0]);
+    t.start(Object.values(owners)[0]);
+  }
+  throw new Error('never won');
+}
+
+describe('campaign', () => {
+  it('carries the party into the scenario a win unlocks, via the lobby', () => {
+    const t = table(3);
+    const a = t.addHero('ana', 'Ana', 'knight');
     t.start('ana');
-    expect(t.phase).toBe('playing');
-    expect(t.viewFor('screen').heroes[0].level).toBe(1);
-    playOut(t, { [a]: 'ana' });
+    expect(t.viewFor('screen').campaign).toEqual({ started: false, canSave: false });
+    winChapterOne(t, { [a]: 'ana' });
+    const after = t.viewFor('screen');
+    expect(after.campaign).toEqual({ started: true, canSave: true });
+    expect(after.nextScenario).toEqual({ id: 'hollow-road-2', name: 'Chapter 2: The Grey Abbey' });
+    expect(after.scenarios.map((s) => s.id)).toEqual(['hollow-road-1', 'hollow-road-2']);
+    const { xp, gold } = after.heroes[0];
+
     t.toLobby('ana');
-    expect(t.phase).toBe('lobby');
-    t.addHero('ben', 'Ben', 'wizard');
-    expect(t.viewFor('screen').heroes).toHaveLength(2);
+    const b = t.addHero('ben', 'Ben', 'wizard');
+    const lobby = t.viewFor('screen');
+    expect(lobby.heroes.map((h) => [h.name, h.xp])).toEqual([['Ana', xp], ['Ben', 0]]);
+    t.start('ana');
+    const v = t.viewFor('screen');
+    expect(v.scenarioName).toBe('Chapter 2: The Grey Abbey');
+    expect(v.heroes.find((h) => h.id === a)).toMatchObject({ xp, gold });
+    expect(v.heroes.find((h) => h.id === b)?.level).toBe(1);
+  });
+
+  it('starts over on a new campaign', () => {
+    const t = table(3);
+    const a = t.addHero('ana', 'Ana', 'knight');
+    t.start('ana');
+    winChapterOne(t, { [a]: 'ana' });
+    expect(() => t.newCampaign('ana')).toThrow(/lobby/);
+    t.toLobby('ana');
+    t.newCampaign('ana');
+    const v = t.viewFor('screen');
+    expect(v.campaign.started).toBe(false);
+    expect(v.scenarios.map((s) => s.id)).toEqual(['hollow-road-1']);
+    expect(v.heroes[0].xp).toBe(0);
+  });
+
+  it('saves the campaign and loads it at another table, where phones claim the heroes', () => {
+    const t = table(3);
+    const a = t.addHero('ana', 'Ana', 'knight');
+    t.addHero('ben', 'Ben', 'cleric');
+    expect(t.save()).toBeUndefined();
+    t.start('ana');
+    const owners = Object.fromEntries(t.viewFor('screen').heroes.map((h) => [h.id, h.id === a ? 'ana' : 'ben']));
+    winChapterOne(t, owners);
+    const save = JSON.parse(JSON.stringify(t.save()));
+    expect(save).toMatchObject({ format: 'otrpg-save', version: 1, pack: { id: 'core.hollow-road' }, scenarioId: 'hollow-road-2' });
+    const before = t.viewFor('screen').heroes;
+
+    const u = table(9);
+    expect(() => t.loadSave('ana', save)).toThrow(/lobby/);
+    u.loadSave('screen', save);
+    const v = u.viewFor('ana') as ControllerView;
+    expect(v.mine).toEqual([]);
+    expect(v.campaign.started).toBe(true);
+    expect(v.scenarioId).toBe('hollow-road-2');
+    expect(v.heroes.map((h) => [h.name, h.level, h.xp, h.gold, h.items, h.claimable])).toEqual(before.map((h) => [h.name, h.level, h.xp, h.gold, h.items, true]));
+    u.claimHero('ana', v.heroes[0].id);
+    expect(() => u.claimHero('ben', v.heroes[0].id)).toThrow(/already/);
+    u.claimHero('ben', v.heroes[1].id);
+    expect((u.viewFor('ana') as ControllerView).mine).toEqual([v.heroes[0].id]);
+    u.start('ana');
+    expect(u.viewFor('screen').scenarioName).toBe('Chapter 2: The Grey Abbey');
+  });
+
+  it('turns away saves for other packs and drops what the pack does not know', () => {
+    const t = table();
+    const hero = { name: 'Zed', classId: 'rogue', level: 9, xp: 5, gold: -4, stats: { dex: 30 }, skills: ['stab', 'nope'], inventory: ['dagger', 'laser'], equipment: { weapon: 'lute' } };
+    const save = { format: 'otrpg-save', version: 1, pack: { id: 'core.hollow-road' }, campaign: { party: [hero], flags: ['f'], unlocked: ['hollow-road-2', 'moon'], rngState: 5 } };
+    expect(() => t.loadSave('ana', { ...save, pack: { id: 'other' } })).toThrow(/other/);
+    expect(() => t.loadSave('ana', { hello: 1 })).toThrow(/isn't a campaign save/);
+    expect(() => t.loadSave('ana', { ...save, campaign: { party: [{ ...hero, classId: 'dragon' }] } })).toThrow(/class/);
+    expect(() => t.loadSave('nobody', save)).toThrow(/token/);
+    t.loadSave('ana', save);
+    const [zed] = t.viewFor('screen').heroes;
+    expect(zed).toMatchObject({ level: 1, gold: 0, skills: ['Stab'], items: ['Dagger'] });
+    expect(zed.stats.dex).toBe(30);
+    expect(t.viewFor('screen').scenarios.map((s) => s.id)).toEqual(['hollow-road-2']);
+  });
+
+  it('lets a new phone take over a hero whose phone is gone', () => {
+    const t = table();
+    const a = t.addHero('ana', 'Ana', 'knight');
+    expect(() => t.claimHero('ben', a)).toThrow(/already/);
+    t.disconnect('ana');
+    t.claimHero('ben', a);
+    expect((t.viewFor('ben') as ControllerView).mine).toEqual([a]);
   });
 });

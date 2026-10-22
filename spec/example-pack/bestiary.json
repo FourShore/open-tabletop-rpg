@@ -16,6 +16,12 @@
     { "id": "captains-sabre", "name": "Captain's Sabre", "kind": "equipment", "slot": "weapon", "rarity": "uncommon", "price": 80, "modifiers": { "attack": 1, "cha": 1 } }
   ],
   "lootTables": [
+    { "id": "loot.abbot", "rolls": 2, "entries": [
+      { "id": "gold", "weight": 4, "count": "4d10" },
+      { "id": "ring-of-warding", "weight": 2 },
+      { "id": "scholars-monocle", "weight": 2 },
+      { "id": "healing-potion", "weight": 3, "count": 2 }
+    ] },
     { "id": "loot.goblin", "rolls": 1, "entries": [
       { "id": "gold", "weight": 6, "count": "1d6" },
       { "id": "healing-potion", "weight": 2 },
@@ -59,6 +65,21 @@
         { "when": { "all": [{ "round": { "min": 2 } }, { "chance": 0.3 }] }, "do": "inspire", "target": "weakestAlly" },
         { "when": { "adjacentToEnemy": true }, "do": "strike", "target": "highestThreat" },
         { "do": "approach", "target": "nearest" }
+      ] },
+    { "id": "hollow-abbot", "name": "Abbot Halric", "tags": ["human", "boss"],
+      "stats": { "str": 2, "dex": 1, "int": 3, "wis": 3, "cha": 2 }, "hp": "22 + 7 * partySize", "defense": 15, "move": 4,
+      "skills": ["arcane-bolt", "mace-strike", "inspire"], "xp": 20, "loot": "loot.abbot",
+      "behavior": [
+        { "when": { "all": [{ "round": { "min": 2 } }, { "chance": 0.3 }] }, "do": "inspire", "target": "weakestAlly" },
+        { "when": { "adjacentToEnemy": true }, "do": "mace-strike", "target": "lowestHp" },
+        { "do": "arcane-bolt", "target": "highestThreat" }
+      ] },
+    { "id": "crypt-skeleton", "name": "Skeleton", "tags": ["undead"],
+      "stats": { "str": 3, "dex": 1, "int": 0, "wis": 0, "cha": 0 }, "hp": "10 + 2 * partyLevel", "defense": 14, "move": 4,
+      "skills": ["mace-strike"], "xp": 3, "resist": { "piercing": 0.5 },
+      "behavior": [
+        { "when": { "adjacentToEnemy": true }, "do": "mace-strike", "target": "nearest" },
+        { "do": "approach", "target": "nearest" }
       ] }
   ],
   "maps": [
@@ -90,6 +111,21 @@
       ],
       "heroStart": [[5, 8], [6, 8], [7, 8], [8, 8], [6, 7], [7, 7]],
       "spawnPoints": { "tent": [[6, 1]], "guards": [[3, 2], [10, 2], [4, 4], [9, 4]] },
-      "exits": [[6, 9], [7, 9]] }
+      "exits": [[6, 9], [7, 9]] },
+    { "id": "abbey-crypt", "name": "Abbey Crypt", "width": 12, "height": 10,
+      "tiles": [
+        "############",
+        "#..........#",
+        "#.^......^.#",
+        "#....*.....#",
+        "#..........#",
+        "##..%..%..##",
+        "#..........#",
+        "#.^......^.#",
+        "#..........#",
+        "#####..#####"
+      ],
+      "heroStart": [[4, 8], [5, 8], [6, 8], [7, 8], [5, 7], [6, 7]],
+      "spawnPoints": { "altar": [[6, 1]], "pews": [[2, 3], [9, 3], [3, 4], [8, 4]], "crypt": [[1, 6], [10, 6]] } }
   ]
 }

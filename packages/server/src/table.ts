@@ -4,6 +4,10 @@
 //
 // Each device holds a random token (kept in the browser's localStorage), so a
 // phone that reloads or drops off wifi gets its seat and heroes back.
+//
+// A table runs a campaign: when a scenario ends the party is kept, and the next
+// start carries it on. A save file holds that campaign, so a group can pick it
+// up on another day or another server.
 
 import {
   act,
@@ -11,18 +15,24 @@ import {
   describeEvent,
   GameError,
   heroCombatOptions,
+  heroUses,
   newGame,
+  nextScenario,
   startScenario,
   text,
   waitingOn,
   type Action,
+  type Character,
   type GameEvent,
   type GameState,
   type PackIndex,
 } from '@otrpg/engine';
+import { readSave, writeSave, type CampaignSave } from './save';
 import { combatView, heroView, promptView, type LogLine, type View } from './view';
 
-export const MAX_HEROES = 6;
+import { MAX_HEROES } from './limits';
+
+export { MAX_HEROES };
 const LOG_LIMIT = 100;
 
 export class TableError extends Error {}
@@ -40,6 +50,7 @@ interface LobbyHero {
   id: string;
   name: string;
   classId: string;
+  /** Token of the phone that plays this hero; empty for a hero loaded from a save and not yet claimed. */
   owner: string;
 }
 
@@ -56,7 +67,20 @@ export interface TableOptions {
 
 /** Actions any phone may send: they move the table along without speaking for a hero. */
 const SHARED_ACTIONS = new Set<Action['type']>(['next', 'leaveShop']);
-const HERO_ACTIONS = new Set<Action['type']>(['vote', 'chooseRoller', 'buy', 'pickTile', 'rerollTiles', 'move', 'useSkill', 'useItem', 'revive', 'endTurn']);
+const HERO_ACTIONS = new Set<Action['type']>([
+  'vote',
+  'chooseRoller',
+  'buy',
+  'pickTile',
+  'rerollTiles',
+  'move',
+  'useSkill',
+  'useItem',
+  'revive',
+  'endTurn',
+  'equip',
+  'unequip',
+]);
 
 export class Table {
   readonly code: string;
@@ -64,6 +88,8 @@ export class Table {
   private heroes: LobbyHero[] = [];
   private nextHero = 1;
   private state: GameState | null = null;
+  /** The campaign as it stood when the last scenario ended (or a save was loaded). */
+  private campaign: GameState | null = null;
   private scenarioId: string;
   private log: LogEntry[] = [];
   /** Combat unit names, so a fight's last lines still name the fallen. */
@@ -128,6 +154,16 @@ export class Table {
     return id;
   }
 
+  /** Take over a hero nobody is playing: one loaded from a save, or one whose phone has gone. */
+  claimHero(token: string, heroId: unknown): void {
+    this.controller(token);
+    const hero = this.heroes.find((h) => h.id === heroId);
+    if (!hero) throw new TableError('No such hero');
+    if (hero.owner === token) return;
+    if (hero.owner && this.seats.get(hero.owner)?.connections) throw new TableError(`${hero.name} is already being played`);
+    hero.owner = token;
+  }
+
   removeHero(token: string, heroId: unknown): void {
     this.controller(token);
     if (this.state) throw new TableError('The game has started');
@@ -143,15 +179,20 @@ export class Table {
     this.scenarioId = scenarioId as string;
   }
 
-  /** Start from the lobby, or start a fresh run with the same heroes after a scenario ends. */
+  /**
+   * Start the chosen scenario. On a campaign the party carries on from the last
+   * scenario (as the pack's rules allow); heroes who joined since start fresh.
+   */
   start(token: string): void {
     this.controller(token);
     if (this.phase === 'playing') throw new TableError('A scenario is running');
     if (!this.heroes.length) throw new TableError('Add at least one hero first');
     const players = this.heroes.map(({ id, name, classId }) => ({ id, name, classId }));
-    if (this.state) this.seed = (this.seed + 0x9e3779b9) >>> 0;
     this.log = [];
-    const r = startScenario(this.index, newGame(this.index, { seed: this.seed, players }), this.scenarioId);
+    const base = this.campaign;
+    const r = base
+      ? nextScenario(this.index, { ...base, party: this.lobbyParty() }, this.scenarioId)
+      : startScenario(this.index, newGame(this.index, { seed: this.seed, players }), this.scenarioId);
     this.apply(r.state, r.events);
   }
 
@@ -162,6 +203,46 @@ export class Table {
     this.state = null;
     this.shownCard = undefined;
     this.log = [];
+  }
+
+  /** Drop the campaign's progress: the heroes in the lobby start again from scratch. */
+  newCampaign(token: string): void {
+    this.controller(token);
+    if (this.phase !== 'lobby') throw new TableError('Go back to the lobby first');
+    this.campaign = null;
+    this.seed = (this.seed + 0x9e3779b9) >>> 0;
+    this.scenarioId = this.scenarios()[0]?.id ?? '';
+  }
+
+  // ---------- saves ----------
+
+  /** The campaign so far, or undefined before any scenario has ended. */
+  save(): CampaignSave | undefined {
+    if (!this.campaign) return undefined;
+    return writeSave(this.index, { ...this.campaign, party: this.lobbyParty() }, this.scenarioId);
+  }
+
+  /** Replace the lobby with a saved campaign. Its heroes wait for phones to claim them. */
+  loadSave(token: string, data: unknown): void {
+    if (!this.seats.has(token)) throw new TableError('Missing device token');
+    if (this.phase !== 'lobby') throw new TableError('Load a save from the lobby');
+    let loaded;
+    try {
+      loaded = readSave(this.index, data);
+    } catch (e) {
+      throw new TableError(e instanceof Error ? e.message : 'That save could not be read');
+    }
+    const ids = new Map<string, string>();
+    const party: Character[] = loaded.party.map((ch) => {
+      const id = `h${this.nextHero++}`;
+      ids.set(ch.id, id);
+      return { ...ch, id };
+    });
+    this.heroes = party.map((ch) => ({ id: ch.id, name: ch.name, classId: ch.classId, owner: '' }));
+    const fresh = newGame(this.index, { seed: loaded.rngState, players: party });
+    this.campaign = { ...fresh, phase: 'ended', party, flags: loaded.flags, unlocked: loaded.unlocked };
+    const open = this.scenarios();
+    this.scenarioId = open.find((x) => x.id === loaded.scenarioId)?.id ?? open[0]?.id ?? '';
   }
 
   // ---------- play ----------
@@ -186,6 +267,8 @@ export class Table {
     this.state = state;
     for (const e of events) {
       if (e.type === 'scenarioStarted') this.shownCard = undefined;
+      // After a win, the next scenario to play is the one it opened.
+      if (e.type === 'scenarioEnded' && e.result === 'victory' && e.unlocked.length) this.scenarioId = e.unlocked[0];
       if (e.type === 'cardRevealed') this.shownCard = e.cardId;
       if (e.type === 'unitSpawned') this.names.set(e.unitId, e.name);
       const line = describeEvent(this.index, state, e, { names: this.names });
@@ -198,6 +281,8 @@ export class Table {
       this.log.push(entry);
     }
     if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);
+    // Level-ups are picked before the campaign moves on.
+    if (state.phase === 'ended' && !state.pending) this.campaign = state;
   }
 
   // ---------- views ----------
@@ -216,6 +301,7 @@ export class Table {
     const seats = [...this.seats.values()].filter((x) => x.connections > 0);
     const base = {
       code: this.code,
+      packId: this.index.pack.id,
       packName: text(this.index.pack.name),
       phase: this.phase,
       result: s?.result,
@@ -224,9 +310,13 @@ export class Table {
       scenarios: this.scenarios(),
       scenarioId: s?.scenarioId ?? this.scenarioId,
       scenarioName: sc ? text(sc.name) : undefined,
+      nextScenario: this.phase === 'ended' ? this.scenarios().find((x) => x.id === this.scenarioId) : undefined,
       stats: this.index.abilityStats,
       // In the lobby, heroes are shown as they will start.
-      heroes: (s?.party ?? this.heroes.map((h) => createCharacter(this.index, h))).map((ch) => heroView(this.index, ch, online(ch.id))),
+      heroes: (s?.party ?? this.lobbyParty()).map((ch) =>
+        heroView(this.index, ch, online(ch.id), s ? heroUses(this.index, s, ch.id) : [], !this.heroes.find((h) => h.id === ch.id)?.owner || !online(ch.id)),
+      ),
+      campaign: { started: !!this.campaign, canSave: !!this.campaign && this.phase !== 'playing' },
       card: card ? { title: text(card.title), text: text(card.text), type: card.type, image: this.asset(card.image) } : undefined,
       cardsLeft: s?.deck.length ?? 0,
       prompt: s?.pending ? promptView(this.index, s.pending) : undefined,
@@ -259,9 +349,14 @@ export class Table {
     return !!hero && (hero.owner === token || !this.seats.get(hero.owner)?.connections);
   }
 
+  /** The lobby's heroes as they stand in the campaign; newcomers as new characters. */
+  private lobbyParty(): Character[] {
+    return this.heroes.map((h) => this.campaign?.party.find((p) => p.id === h.id) ?? createCharacter(this.index, h));
+  }
+
   private scenarios(): { id: string; name: string }[] {
     const all = this.index.pack.scenarios ?? [];
-    const start = this.state?.unlocked ?? this.index.pack.campaign?.startScenarios;
+    const start = (this.state ?? this.campaign)?.unlocked ?? this.index.pack.campaign?.startScenarios;
     const open = start?.length ? all.filter((s) => start.includes(s.id)) : all;
     return open.map((s) => ({ id: s.id, name: text(s.name) }));
   }

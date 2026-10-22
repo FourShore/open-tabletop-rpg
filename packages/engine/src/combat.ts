@@ -245,8 +245,9 @@ function outcome(c: CombatCtx, cs: CombatState, roundOver = false): CombatOutcom
 
 export type CombatAction =
   | { type: 'move'; playerId: string; to: Point }
-  | { type: 'useSkill'; playerId: string; skillId: string; target?: Point }
-  | { type: 'useItem'; playerId: string; itemId: string; target?: Point }
+  // Outside a fight these take `targetId`, a hero, instead of a square.
+  | { type: 'useSkill'; playerId: string; skillId: string; target?: Point; targetId?: string }
+  | { type: 'useItem'; playerId: string; itemId: string; target?: Point; targetId?: string }
   | { type: 'revive'; playerId: string; targetId: string }
   | { type: 'endTurn'; playerId: string };
 

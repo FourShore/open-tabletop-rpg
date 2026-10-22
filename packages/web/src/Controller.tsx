@@ -4,13 +4,16 @@
 import type { ControllerView, HeroView, PromptView } from '@otrpg/server/view';
 import { useState } from 'react';
 import { CombatControls } from './CombatControls';
+import { Gear } from './Gear';
 import { useTable } from './net';
 import { CardPanel, HeroCard, Log, Missing, PromptSummary, ResultBanner, StatusBar } from './parts';
+import { DownloadSave, LoadSave, useAutosave } from './saves';
 
 type Send = (type: string, payload?: unknown) => void;
 
 export function Controller({ code }: { code: string }) {
   const { view, status, error, clearError, send } = useTable(code, 'controller');
+  useAutosave(code, view);
   if (status === 'missing') return <Missing code={code} />;
   const act = (action: Record<string, unknown>) => send('act', { action });
 
@@ -42,12 +45,45 @@ export function Controller({ code }: { code: string }) {
 function Lobby({ view, send }: { view: ControllerView; send: Send }) {
   const [name, setName] = useState('');
   const [classId, setClassId] = useState(view.classes[0]?.id ?? '');
+  const [wipe, setWipe] = useState(false);
   const mine = view.heroes.filter((h) => view.mine.includes(h.id));
   const others = view.heroes.filter((h) => !view.mine.includes(h.id));
   const full = view.heroes.length >= view.maxHeroes;
 
+  // A loaded campaign's heroes wait for players: offer them before making a new one.
+  const claimFirst = !mine.length && others.some((h) => h.claimable);
+  const othersList = others.length > 0 && (
+    <section>
+      <h2>{claimFirst ? 'Pick up a hero' : 'Also at the table'}</h2>
+      {others.map((h) =>
+        h.claimable ? (
+          <div key={h.id} className="row spread">
+            <HeroCard hero={h} compact />
+            <button onClick={() => send('claimHero', { heroId: h.id })}>Play as {h.name}</button>
+          </div>
+        ) : (
+          <HeroCard key={h.id} hero={h} compact />
+        ),
+      )}
+    </section>
+  );
+
   return (
     <>
+      {view.campaign.started && (
+        <section className="panel campaign-note">
+          <p>
+            <b>Campaign in progress.</b> Heroes keep their levels, gold and gear. New heroes start fresh.
+          </p>
+          <div className="row">
+            <DownloadSave code={view.code} view={view} />
+            <button className="ghost" onClick={() => (wipe ? (send('newCampaign'), setWipe(false)) : setWipe(true))}>
+              {wipe ? 'Tap again to start over' : 'New campaign'}
+            </button>
+          </div>
+        </section>
+      )}
+      {claimFirst && othersList}
       <section>
         <h2>{mine.length ? 'Your heroes' : 'Make your hero'}</h2>
         {mine.map((h) => (
@@ -89,12 +125,10 @@ function Lobby({ view, send }: { view: ControllerView; send: Send }) {
           </form>
         )}
       </section>
-      {others.length > 0 && (
+      {!claimFirst && othersList}
+      {!mine.length && !view.campaign.started && (
         <section>
-          <h2>Also at the table</h2>
-          {others.map((h) => (
-            <HeroCard key={h.id} hero={h} compact />
-          ))}
+          <LoadSave view={view} send={send} />
         </section>
       )}
       {mine.length > 0 && (
@@ -111,6 +145,11 @@ function Lobby({ view, send }: { view: ControllerView; send: Send }) {
           <button className="primary" onClick={() => send('start')}>
             Start {view.scenarioName ?? 'the game'} ({view.heroes.length} {view.heroes.length === 1 ? 'hero' : 'heroes'})
           </button>
+        </section>
+      )}
+      {mine.length > 0 && (
+        <section>
+          <LoadSaveToggle view={view} send={send} />
         </section>
       )}
     </>
@@ -137,9 +176,10 @@ function Play({ view, send, act }: { view: ControllerView; send: Send; act: (a: 
         {view.phase === 'ended' ? (
           <>
             <button className="primary" onClick={() => send('start')}>
-              Play again
+              {view.nextScenario ? `Play ${view.nextScenario.name}` : 'Play again'}
             </button>
             <button onClick={() => send('lobby')}>Back to the lobby</button>
+            <DownloadSave code={view.code} view={view} />
           </>
         ) : view.prompt ? (
           <PromptActions key={promptKey(view.prompt)} view={view} prompt={view.prompt} mine={mine} act={act} />
@@ -154,9 +194,34 @@ function Play({ view, send, act }: { view: ControllerView; send: Send; act: (a: 
           <HeroCard key={h.id} hero={h} waiting={view.waitingOn.includes(h.id)} yours />
         ))}
       </section>
+      {mine.length > 0 && (view.phase === 'ended' || !view.prompt || view.prompt.kind === 'shop') && (
+        <section>
+          {mine.map((h) => (
+            <details key={h.id} className="panel gear-panel">
+              <summary>
+                {mine.length > 1 ? `${h.name}'s gear` : 'Gear and items'}
+                {h.uses.some((u) => !u.blocked) && <span className="tag gold">usable</span>}
+              </summary>
+              <Gear hero={h} party={view.heroes} act={act} />
+            </details>
+          ))}
+        </section>
+      )}
       <Log lines={view.log} limit={8} />
     </>
   );
+}
+
+/** Loading a save replaces the lobby, so it sits behind a second tap once heroes are made. */
+function LoadSaveToggle({ view, send }: { view: ControllerView; send: Send }) {
+  const [open, setOpen] = useState(false);
+  if (!open)
+    return (
+      <button className="ghost" onClick={() => setOpen(true)}>
+        Load a saved campaign…
+      </button>
+    );
+  return <LoadSave view={view} send={send} />;
 }
 
 function PromptActions({ view, prompt: p, mine, act }: { view: ControllerView; prompt: PromptView; mine: HeroView[]; act: (a: Record<string, unknown>) => void }) {
@@ -219,11 +284,25 @@ function PromptActions({ view, prompt: p, mine, act }: { view: ControllerView; p
               ))}
             </select>
           )}
-          {p.stock.map((e) => (
-            <button key={e.itemId} disabled={e.qty <= 0 || who.gold < e.price} onClick={() => act({ type: 'buy', playerId: who.id, itemId: e.itemId })}>
-              Buy {e.name} · {e.price} gold
-            </button>
-          ))}
+          <ul className="items shop">
+            {p.stock.map((e) => {
+              const owned = (who.inventory.find((i) => i.itemId === e.itemId)?.count ?? 0) + who.equipment.filter((x) => x.itemId === e.itemId).length;
+              return (
+                <li key={e.itemId}>
+                  <div>
+                    <b>{e.name}</b> <span className="muted small">{e.qty <= 0 ? 'sold out' : e.qty < 99 ? `${e.qty} left` : ''}</span>
+                    <div className="muted small">
+                      {e.details}
+                      {owned ? ` · ${who.name} has ${owned}` : ''}
+                    </div>
+                  </div>
+                  <button disabled={e.qty <= 0 || who.gold < e.price} onClick={() => act({ type: 'buy', playerId: who.id, itemId: e.itemId })}>
+                    Buy · {e.price}g
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
           <p className="muted small">{who.name} has {who.gold} gold.</p>
           <button className="primary" onClick={() => act({ type: 'leaveShop' })}>
             Leave the shop

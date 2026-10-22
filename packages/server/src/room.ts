@@ -24,6 +24,8 @@ export class GameRoom extends Room {
   /** Set once at startup by createGameServer. */
   static index: PackIndex;
   static seed?: number;
+  /** Open tables by code, for the save download. */
+  static tables = new Map<string, Table>();
 
   maxClients = 32;
   autoDispose = false;
@@ -38,6 +40,7 @@ export class GameRoom extends Room {
     activeCodes.add(code);
     this.roomId = code;
     this.table = new Table(GameRoom.index, { code, seed: GameRoom.seed });
+    GameRoom.tables.set(code, this.table);
 
     const handle = (type: string, fn: (token: string, msg: Record<string, unknown>) => void) =>
       this.onMessage(type, (client, msg) => {
@@ -53,6 +56,9 @@ export class GameRoom extends Room {
 
     handle('addHero', (t, m) => this.table.addHero(t, m.name, m.classId));
     handle('removeHero', (t, m) => this.table.removeHero(t, m.heroId));
+    handle('claimHero', (t, m) => this.table.claimHero(t, m.heroId));
+    handle('newCampaign', (t) => this.table.newCampaign(t));
+    handle('loadSave', (t, m) => this.table.loadSave(t, m.save));
     handle('scenario', (t, m) => this.table.chooseScenario(t, m.scenarioId));
     handle('start', (t) => this.table.start(t));
     handle('lobby', (t) => this.table.toLobby(t));
@@ -78,6 +84,7 @@ export class GameRoom extends Room {
 
   onDispose() {
     activeCodes.delete(this.roomId);
+    GameRoom.tables.delete(this.roomId);
   }
 
   /** Send every connected device its own view. */

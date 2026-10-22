@@ -13,7 +13,7 @@ export function HeroCard({ hero, waiting, compact, yours }: { hero: HeroView; wa
         <span className="muted">
           {hero.className} · lv {hero.level}
         </span>
-        {!hero.online && <span className="tag">offline</span>}
+        {!hero.online && <span className="tag">no player</span>}
         {waiting && <span className="tag gold">{yours ? 'your move' : 'their move'}</span>}
       </div>
       <HpBar hp={hero.hp} max={hero.maxHp} />
@@ -179,6 +179,12 @@ export function ResultBanner({ view }: { view: PublicView }) {
     <div className={`result ${view.result}`}>
       <h2>{view.result === 'victory' ? 'Victory' : 'Defeat'}</h2>
       <p>{view.result === 'victory' ? `${view.scenarioName} is complete.` : 'The party has fallen.'}</p>
+      {view.nextScenario && (
+        <p className="muted">
+          {view.result === 'victory' && view.nextScenario.name !== view.scenarioName ? `Next: ${view.nextScenario.name}.` : 'You can try again.'} Heroes keep what
+          they earned.
+        </p>
+      )}
     </div>
   );
 }
