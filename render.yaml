@@ -1,0 +1,13 @@
+# Render blueprint: one web service serves the app, the pack assets and the
+# game WebSockets. Tables live in memory, so keep it to a single instance.
+services:
+  - type: web
+    name: open-tabletop-rpg
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

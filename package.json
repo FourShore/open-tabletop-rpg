@@ -6,9 +6,17 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "concurrently -k -n server,web -c yellow,cyan \"npm run dev -w @otrpg/server\" \"npm run dev -w @otrpg/web\"",
+    "build": "npm run build -w @otrpg/web",
+    "start": "npm start -w @otrpg/server",
     "test": "npm test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "e2e": "playwright test",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tsconfig.e2e.json",
     "validate": "npm run validate -w @otrpg/engine --",
     "play": "npm run play -w @otrpg/engine --"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.2.5"
   }
 }

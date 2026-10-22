@@ -211,6 +211,9 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
         if (p?.kind !== 'levelUp' || p.playerId !== action.playerId) throw new GameError('No level-up is waiting for this player');
         const tile = p.tiles[action.index];
         if (!tile) throw new GameError(`No tile ${action.index}`);
+        if (tile.kind === 'anyStat' && !(action.stat && c.index.abilityStats.includes(action.stat))) {
+          throw new GameError(`Pick one of ${c.index.abilityStats.join(', ')} for the +${tile.amount} tile`);
+        }
         const ch = player(c, action.playerId);
         applyTile(c.index, ch, tile, action.stat);
         s.pending = null;

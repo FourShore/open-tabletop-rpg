@@ -4,3 +4,5 @@ coverage/
 *.log
 .DS_Store
 __pycache__/
+test-results/
+playwright-report/

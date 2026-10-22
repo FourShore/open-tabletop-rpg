@@ -4,11 +4,41 @@
   "commands": {
     "test": "npm test",
     "typecheck": "npm run typecheck",
-    "validate": "npm run validate -- spec/example-pack"
+    "validate": "npm run validate -- spec/example-pack",
+    "e2e": "npm run e2e"
   },
   "rules": [
-    { "paths": ["packages/**/*.ts", "packages/**/*.tsx"], "require": ["test", "typecheck"] },
-    { "paths": ["spec/**/*.json"], "require": ["validate", "test"] }
+    {
+      "paths": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx"
+      ],
+      "require": [
+        "test",
+        "typecheck"
+      ]
+    },
+    {
+      "paths": [
+        "spec/**/*.json"
+      ],
+      "require": [
+        "validate",
+        "test"
+      ]
+    },
+    {
+      "paths": [
+        "packages/server/src/**",
+        "packages/web/**",
+        "e2e/**"
+      ],
+      "require": [
+        "e2e"
+      ]
+    }
   ],
-  "behaviorFiles": ["spec/**/*.json"]
+  "behaviorFiles": [
+    "spec/**/*.json"
+  ]
 }
