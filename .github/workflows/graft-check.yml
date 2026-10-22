@@ -21,4 +21,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The policy's e2e command is re-run here, so it needs a browser.
+      - run: npx playwright install --with-deps chromium
       - uses: FourShore/Graft@v0.1.0
