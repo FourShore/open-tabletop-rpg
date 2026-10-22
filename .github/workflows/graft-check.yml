@@ -23,4 +23,4 @@ jobs:
       - run: npm ci
       # The policy's e2e command is re-run here, so it needs a browser.
       - run: npx playwright install --with-deps chromium
-      - uses: FourShore/Graft@v0.1.0
+      - uses: FourShore/Graft@v0.2.0
