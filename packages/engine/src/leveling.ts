@@ -2,7 +2,7 @@
 // from rules.leveling when the pack sets it.
 
 import { characterWhenContext, maxHp, modifier, type Character } from './character';
-import type { PackIndex } from './pack';
+import { text, type PackIndex } from './pack';
 import type { Rng } from './rng';
 import type { Leveling, SkillDef } from './types';
 import { evalWhen, inRange } from './when';
@@ -139,7 +139,7 @@ export function applyTile(index: PackIndex, ch: Character, tile: Tile, stat?: st
 export function describeTile(index: PackIndex, tile: Tile): string {
   if (tile.kind === 'skill') {
     const s = index.skills.get(tile.skillId);
-    const name = typeof s?.name === 'string' ? s.name : tile.skillId;
+    const name = text(s?.name) || tile.skillId;
     return `${name} (tier ${tile.tier} skill)`;
   }
   if (tile.kind === 'statBoost') return `+${tile.amount} ${tile.stat.toUpperCase()}`;

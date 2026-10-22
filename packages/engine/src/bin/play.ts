@@ -7,6 +7,7 @@
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { act, GameError, newGame, startScenario, type Action, type GameEvent, type GameState, type PlayerSpec } from '../game';
+import { describeEvent } from '../format';
 import { describeTile } from '../leveling';
 import { loadPackFromDisk } from '../node';
 import { indexPack, text } from '../pack';
@@ -35,7 +36,6 @@ const players: PlayerSpec[] = String(args.players ?? 'Ana:knight,Ben:wizard,Cy:c
 const scenarioId = String(args.scenario ?? pack.campaign?.startScenarios?.[0] ?? pack.scenarios?.[0]?.id);
 
 const rl = auto ? null : createInterface({ input: process.stdin, output: process.stdout });
-const nameOf = (s: GameState, id: string) => s.party.find((p) => p.id === id)?.name ?? id;
 
 let state = newGame(index, { seed, players });
 console.log(`\n${pack.name} - seed ${seed}${auto ? ' (auto)' : ''}`);
@@ -126,74 +126,17 @@ async function choose<T>(prompt: string, labels: string[], map: (n: number) => T
 
 function print(events: GameEvent[], s: GameState) {
   for (const e of events) {
-    const who = 'playerId' in e ? nameOf(s, e.playerId) : '';
-    switch (e.type) {
-      case 'scenarioStarted':
-        console.log(`\n== ${e.name} ==\n${e.intro}`);
-        printParty(s);
-        break;
-      case 'cardRevealed':
-        console.log(`\n--- ${e.title} [${e.cardType}] ---${e.text ? `\n${e.text}` : ''}`);
-        break;
-      case 'cardSkipped':
-        console.log(`  (skipped ${e.cardId}: requirements not met)`);
-        break;
-      case 'narrate':
-        console.log(`  ${e.text}`);
-        break;
-      case 'checkRolled':
-        console.log(`  ${who} rolls ${e.stat.toUpperCase()}: d20 ${e.natural} -> ${e.total} vs DC ${e.dc}: ${e.critical ? 'CRITICAL ' : e.fumble ? 'FUMBLE ' : ''}${e.success ? 'success' : 'failure'}`);
-        break;
-      case 'checkResolved':
-        if (e.mode === 'group') console.log(`  Group check: ${e.success ? 'success' : 'failure'}`);
-        break;
-      case 'voteResolved':
-        console.log(`  The party chooses: ${e.label}`);
-        break;
-      case 'voteSplit':
-        console.log('  The vote is split. Vote again.');
-        break;
-      case 'damaged':
-        console.log(`  ${who} takes ${e.amount} damage (${e.hp} HP)`);
-        break;
-      case 'healed':
-        if (e.amount) console.log(`  ${who} heals ${e.amount} (${e.hp} HP)`);
-        break;
-      case 'conditionAdded':
-        console.log(`  ${who} is ${e.condition}${e.duration ? ` for ${e.duration} cards` : ''}`);
-        break;
-      case 'conditionRemoved':
-        console.log(`  ${who} is no longer ${e.condition}`);
-        break;
-      case 'gained': {
-        const parts = [e.xp && `${e.xp} XP`, e.gold && `${e.gold} gold`, e.item && text(index.items.get(e.item)?.name), e.skill].filter(Boolean);
-        if (parts.length) console.log(`  ${who} gains ${parts.join(', ')}`);
-        break;
-      }
-      case 'lost':
-        console.log(`  ${who} loses ${[e.gold && `${e.gold} gold`, e.item].filter(Boolean).join(', ')}`);
-        break;
-      case 'deckChanged':
-        console.log(`  (${e.cardId} ${e.op === 'insert' ? 'added to' : 'removed from'} the deck)`);
-        break;
-      case 'combatStarted':
-        console.log(`  Combat on ${e.map}!`);
-        break;
-      case 'combatEnded':
-        console.log(`  ${e.victory ? 'Victory!' : 'Defeat...'}`);
-        break;
-      case 'bought':
-        console.log(`  ${who} buys ${text(index.items.get(e.itemId)?.name)} for ${e.price} gold`);
-        break;
-      case 'tilesRerolled':
-        console.log(`  ${who} ${e.gold ? `pays ${e.gold} gold to reroll` : 'rerolls'}: ${e.tiles.map((t) => describeTile(index, t)).join(' | ')}`);
-        break;
-      case 'leveledUp':
-        console.log(`  ${who} is now level ${e.level}: ${describeTile(index, e.tile)}${e.stat ? ` -> ${e.stat.toUpperCase()}` : ''}`);
-        break;
-      case 'scenarioEnded':
-        console.log(`\n== Scenario ${e.result === 'victory' ? 'complete' : 'failed'}${e.unlocked.length ? `. Unlocked: ${e.unlocked.join(', ')}` : ''} ==`);
-        break;
+    if (e.type === 'scenarioStarted') {
+      console.log(`\n== ${e.name} ==\n${e.intro}`);
+      printParty(s);
+    } else if (e.type === 'cardRevealed') {
+      console.log(`\n--- ${e.title} [${e.cardType}] ---${e.text ? `\n${e.text}` : ''}`);
+    } else if (e.type === 'scenarioEnded') {
+      console.log(`\n== ${describeEvent(index, s, e)} ==`);
+    } else {
+      // The CLI is one shared screen, so secret rolls are shown.
+      const line = describeEvent(index, s, e, { revealSecret: true });
+      if (line) console.log(`  ${line}`);
     }
   }
 }

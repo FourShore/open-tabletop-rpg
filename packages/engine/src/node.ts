@@ -10,8 +10,13 @@ import type { Pack } from './types';
  * scripts inside the package folder).
  */
 export async function loadPackFromDisk(path: string): Promise<Pack> {
-  const base = process.env.INIT_CWD ?? process.cwd();
-  const manifest = resolve(base, path.endsWith('.json') ? path : join(path, 'pack.json'));
+  const manifest = resolvePackPath(path);
   const dir = dirname(manifest);
   return loadPack(async (rel) => JSON.parse(await readFile(join(dir, rel), 'utf8')), manifest.slice(dir.length + 1));
+}
+
+/** Absolute path of the pack.json that `loadPackFromDisk(path)` reads. */
+export function resolvePackPath(path: string): string {
+  const base = process.env.INIT_CWD ?? process.cwd();
+  return resolve(base, path.endsWith('.json') ? path : join(path, 'pack.json'));
 }

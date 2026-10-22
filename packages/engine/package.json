@@ -5,6 +5,10 @@
   "description": "Rules engine for Open Tabletop RPG game packs: pack loading, validation, dice, checks, leveling and the event-deck runner.",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p .",
