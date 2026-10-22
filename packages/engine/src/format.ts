@@ -105,6 +105,12 @@ export function describeEvent(index: PackIndex, state: GameState, e: GameEvent, 
       return null;
     case 'turnSkipped':
       return `${who} loses their turn.`;
+    case 'abilityUsed':
+      return `${who} uses ${e.name}${e.targetIds.length === 1 && e.targetIds[0] !== e.playerId ? ` on ${nameOf(e.targetIds[0])}` : ''}.`;
+    case 'equipped':
+      return `${who} equips ${itemName(e.itemId)}.`;
+    case 'unequipped':
+      return null;
     case 'scenarioEnded':
       return e.result === 'victory' ? `Scenario complete!${e.unlocked.length ? ` Unlocked: ${e.unlocked.map((id) => text(index.scenarios.get(id)?.name) || id).join(', ')}.` : ''}` : 'The party has fallen. Scenario failed.';
   }

@@ -2,8 +2,9 @@
 // returns a new state plus the events that happened, so the same code can run
 // on the server (authoritative) and in tests or a CLI.
 //
-// Grid combat is milestone 3: for now a combat card stops on a `combat`
-// prompt and the caller reports victory or defeat.
+// A combat card hands over to the grid fight in combat.ts until one side wins.
+// Between cards, heroes can swap gear and use items or skills marked
+// usableOutOfCombat; `nextScenario` carries the party on through a campaign.
 
 import {
   characterScope,
@@ -22,7 +23,7 @@ import { evalExpr, evalInt, type Scope } from './expr';
 import { applyTile, drawLevelUpTiles, type Tile } from './leveling';
 import { text, type PackIndex } from './pack';
 import { createRng, shuffle, type Rng } from './rng';
-import type { Card, CheckSpec, CombatSpec, Effect } from './types';
+import type { Card, CheckSpec, CombatSpec, Effect, Targeting } from './types';
 import { evalWhen, type WhenContext } from './when';
 import { drawWeighted, pickWeighted } from './weighted';
 
@@ -66,6 +67,8 @@ export interface GameState {
   combat?: CombatState;
   /** `heroId:skillId` -> uses this scenario, for usesPerScenario. */
   skillUses: Record<string, number>;
+  /** `heroId:skillId` used outside combat since the last card was turned. */
+  usedThisCard?: string[];
 }
 
 export type GameEvent =
@@ -94,6 +97,9 @@ export type GameEvent =
   | { type: 'tilesRerolled'; playerId: string; gold: number; tiles: Tile[]; rerollCost?: number }
   | { type: 'leveledUp'; playerId: string; level: number; tile: Tile; stat?: string }
   | { type: 'scenarioEnded'; result: 'victory' | 'defeat'; unlocked: string[] }
+  | { type: 'abilityUsed'; playerId: string; name: string; targetIds: string[] }
+  | { type: 'equipped'; playerId: string; itemId: string; slot: string }
+  | { type: 'unequipped'; playerId: string; itemId: string; slot: string }
   | CombatEvent;
 
 export type Action =
@@ -106,7 +112,9 @@ export type Action =
   | { type: 'buy'; playerId: string; itemId: string }
   | { type: 'leaveShop' }
   | { type: 'pickTile'; playerId: string; index: number; stat?: string }
-  | { type: 'rerollTiles'; playerId: string };
+  | { type: 'rerollTiles'; playerId: string }
+  | { type: 'equip'; playerId: string; itemId: string }
+  | { type: 'unequip'; playerId: string; slot: string };
 
 export interface StepResult {
   state: GameState;
@@ -139,6 +147,7 @@ export function newGame(index: PackIndex, opts: { seed: number; players: PlayerS
     pending: null,
     cardsResolved: 0,
     skillUses: {},
+    usedThisCard: [],
   };
 }
 
@@ -147,7 +156,7 @@ export function startScenario(index: PackIndex, state: GameState, scenarioId: st
     const sc = index.scenarios.get(scenarioId);
     if (!sc) throw new GameError(`Unknown scenario '${scenarioId}'`);
     const s = c.s;
-    Object.assign(s, { phase: 'playing', result: undefined, scenarioId, scenarioFlags: [], deck: [], discard: [], current: undefined, pending: null, combat: undefined, skillUses: {} });
+    Object.assign(s, { phase: 'playing', result: undefined, scenarioId, scenarioFlags: [], deck: [], discard: [], current: undefined, pending: null, combat: undefined, skillUses: {}, usedThisCard: [] });
     const ctx = partyWhen(c);
     for (const entry of sc.deck) {
       if ('card' in entry) {
@@ -166,8 +175,9 @@ export function startScenario(index: PackIndex, state: GameState, scenarioId: st
 export function act(index: PackIndex, state: GameState, action: Action): StepResult {
   return run(index, state, (c) => {
     const s = c.s;
-    // Level-ups earned on the last card are still picked after the scenario ends.
-    if (s.phase !== 'playing' && !(s.phase === 'ended' && (action.type === 'pickTile' || action.type === 'rerollTiles'))) {
+    // Level-ups earned on the last card are still picked after the scenario ends, and gear can be swapped.
+    const afterwards = new Set<Action['type']>(['pickTile', 'rerollTiles', 'equip', 'unequip']);
+    if (s.phase !== 'playing' && !(s.phase === 'ended' && afterwards.has(action.type))) {
       throw new GameError('No scenario is running');
     }
     const p = s.pending;
@@ -191,9 +201,11 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
       case 'resolveCombat':
         if (p?.kind !== 'combat') throw new GameError('No combat is running');
         return finishCombat(c, p, action.victory);
-      case 'move':
       case 'useSkill':
       case 'useItem':
+        if (p?.kind !== 'combat') return useOutOfCombat(c, action);
+      // falls through
+      case 'move':
       case 'revive':
       case 'endTurn': {
         if (p?.kind !== 'combat') throw new GameError('No combat is running');
@@ -236,6 +248,10 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
         c.events.push({ type: 'leveledUp', playerId: ch.id, level: ch.level, tile, stat: action.stat });
         return offerLevelUps(c);
       }
+      case 'equip':
+      case 'unequip':
+        if (p?.kind === 'combat') throw new GameError("Gear can't be changed mid-fight");
+        return action.type === 'equip' ? equip(c, player(c, action.playerId), action.itemId) : unequip(c, player(c, action.playerId), action.slot);
       case 'rerollTiles': {
         if (p?.kind !== 'levelUp' || p.playerId !== action.playerId) throw new GameError('No level-up is waiting for this player');
         const ch = player(c, action.playerId);
@@ -266,6 +282,128 @@ export function waitingOn(state: GameState): string[] {
     return p.rule === 'leader' ? [state.party[0].id] : alive.filter((id) => !(id in p.votes));
   }
   return [];
+}
+
+/**
+ * Start the next scenario of a campaign with the same party. What carries over
+ * follows the pack's `campaign.persistBetweenScenarios`; anything not listed
+ * goes back to how a new hero of that class starts. Flags and unlocks always carry.
+ */
+export function nextScenario(index: PackIndex, state: GameState, scenarioId: string): StepResult {
+  if (state.phase === 'playing' || state.pending) throw new GameError('Finish the scenario first');
+  const keep = new Set(index.pack.campaign?.persistBetweenScenarios ?? ['items', 'gold', 'xp']);
+  const s = structuredClone(state);
+  s.party = s.party.map((ch) => {
+    const fresh = createCharacter(index, { id: ch.id, name: ch.name, classId: ch.classId });
+    const next: Character = keep.has('xp') ? ch : { ...fresh };
+    if (!keep.has('items')) Object.assign(next, { equipment: fresh.equipment, inventory: fresh.inventory });
+    else Object.assign(next, { equipment: ch.equipment, inventory: ch.inventory });
+    next.gold = keep.has('gold') ? ch.gold : fresh.gold;
+    next.conditions = keep.has('conditions') ? ch.conditions : [];
+    next.hp = keep.has('hp') ? Math.min(ch.hp, maxHp(index, next)) : maxHp(index, next);
+    return next;
+  });
+  return startScenario(index, s, scenarioId);
+}
+
+/** Something a hero can use between cards: an item in their pack or a skill marked usableOutOfCombat. */
+export interface HeroUse {
+  kind: 'item' | 'skill';
+  id: string;
+  name: string;
+  description?: string;
+  /** 'self' and 'party' need no aim; 'ally' needs a hero picked. */
+  aim: 'self' | 'ally' | 'party';
+  /** Why it can't be used right now. */
+  blocked?: string;
+}
+
+/** What a hero could use outside a fight. Empty in combat, which has its own options. */
+export function heroUses(index: PackIndex, state: GameState, heroId: string): HeroUse[] {
+  const ch = state.party.find((p) => p.id === heroId);
+  if (!ch || state.combat) return [];
+  const open = state.phase === 'playing' && (!state.pending || state.pending.kind === 'shop');
+  const why = (extra?: string) => (!open ? 'Not right now' : ch.hp <= 0 ? `${ch.name} is down` : extra);
+  const out: HeroUse[] = [];
+  for (const id of new Set(ch.inventory)) {
+    const item = index.items.get(id);
+    const aim = item?.use?.effects?.length ? aimOf(item.use.targeting) : undefined;
+    if (!item || !aim) continue;
+    out.push({ kind: 'item', id, name: text(item.name) || id, description: text(item.description) || undefined, aim, blocked: why() });
+  }
+  const granted = Object.values(ch.equipment).flatMap((id) => index.items.get(id)?.grantsSkills ?? []);
+  for (const id of new Set([...ch.skills, ...granted])) {
+    const skill = index.skills.get(id);
+    const aim = skill?.usableOutOfCombat && skill.effects?.length ? aimOf(skill.targeting) : undefined;
+    if (!skill || !aim) continue;
+    const used = (state.skillUses[`${ch.id}:${id}`] ?? 0) >= (skill.usesPerScenario ?? Infinity);
+    const again = state.usedThisCard?.includes(`${ch.id}:${id}`);
+    out.push({
+      kind: 'skill',
+      id,
+      name: text(skill.name) || id,
+      description: text(skill.description) || undefined,
+      aim,
+      blocked: why(used ? 'Used up this scenario' : again ? 'Once per card' : undefined),
+    });
+  }
+  return out;
+}
+
+function aimOf(t: Targeting | undefined): HeroUse['aim'] | undefined {
+  switch (t?.target ?? 'self') {
+    case 'self':
+      return 'self';
+    case 'ally':
+    case 'any':
+      return 'ally';
+    case 'allAllies':
+      return 'party';
+    default:
+      return undefined;
+  }
+}
+
+function useOutOfCombat(c: Ctx, action: Extract<Action, { type: 'useItem' | 'useSkill' }>): void {
+  const { s, index } = c;
+  const ch = player(c, action.playerId);
+  const id = action.type === 'useItem' ? action.itemId : action.skillId;
+  const use = heroUses(index, s, ch.id).find((u) => u.kind === (action.type === 'useItem' ? 'item' : 'skill') && u.id === id);
+  if (!use) throw new GameError(`${ch.name} can't use that outside a fight`);
+  if (use.blocked) throw new GameError(use.blocked);
+  const targets = use.aim === 'party' ? s.party : use.aim === 'self' ? [ch] : [player(c, action.targetId ?? ch.id)];
+  const effects = action.type === 'useItem' ? index.items.get(id)!.use!.effects! : index.skills.get(id)!.effects!;
+  if (action.type === 'useItem') ch.inventory.splice(ch.inventory.indexOf(id), 1);
+  else {
+    (s.usedThisCard ??= []).push(`${ch.id}:${id}`);
+    if (index.skills.get(id)!.usesPerScenario) s.skillUses[`${ch.id}:${id}`] = (s.skillUses[`${ch.id}:${id}`] ?? 0) + 1;
+  }
+  c.events.push({ type: 'abilityUsed', playerId: ch.id, name: use.name, targetIds: targets.map((t) => t.id) });
+  applyEffects(c, effects, { chooser: ch, rollers: targets, source: ch });
+}
+
+function equip(c: Ctx, ch: Character, itemId: string): void {
+  const item = c.index.items.get(itemId);
+  if (!ch.inventory.includes(itemId) || item?.kind !== 'equipment' || !item.slot) throw new GameError(`${ch.name} has no ${text(item?.name) || itemId} to equip`);
+  if (item.classes && !item.classes.includes(ch.classId)) throw new GameError(`A ${text(c.index.classes.get(ch.classId)?.name)} can't use ${text(item.name)}`);
+  ch.inventory.splice(ch.inventory.indexOf(itemId), 1);
+  const old = ch.equipment[item.slot];
+  if (old) {
+    ch.inventory.push(old);
+    c.events.push({ type: 'unequipped', playerId: ch.id, itemId: old, slot: item.slot });
+  }
+  ch.equipment[item.slot] = itemId;
+  ch.hp = Math.min(ch.hp, maxHp(c.index, ch));
+  c.events.push({ type: 'equipped', playerId: ch.id, itemId, slot: item.slot });
+}
+
+function unequip(c: Ctx, ch: Character, slot: string): void {
+  const itemId = ch.equipment[slot];
+  if (!itemId) throw new GameError(`${ch.name} has nothing in that slot`);
+  delete ch.equipment[slot];
+  ch.inventory.push(itemId);
+  ch.hp = Math.min(ch.hp, maxHp(c.index, ch));
+  c.events.push({ type: 'unequipped', playerId: ch.id, itemId, slot });
 }
 
 // ---------- engine internals ----------
@@ -310,6 +448,7 @@ function targetScope(c: Ctx, ch: Character): Scope {
 
 function drawNext(c: Ctx): void {
   const { s, index } = c;
+  s.usedThisCard = [];
   for (;;) {
     const id = s.deck.shift();
     if (id === undefined) {
@@ -599,6 +738,12 @@ function rollCheck(c: Ctx, ch: Character, check: CheckSpec, dc: number, stat: st
 interface EffectCtx {
   rollers?: Character[];
   chooser?: Character;
+  /** Whose stats amounts use, for a hero's skill or item. Defaults to each target. */
+  source?: Character;
+}
+
+function amountScope(c: Ctx, ch: Character, ec: EffectCtx): Scope {
+  return ec.source ? { ...targetScope(c, ec.source), maxHp: maxHp(c.index, ch), hp: ch.hp } : targetScope(c, ch);
 }
 
 function targetsOf(c: Ctx, e: Effect, ec: EffectCtx): Character[] {
@@ -634,7 +779,7 @@ function applyEffect(c: Ctx, e: Effect, ec: EffectCtx): void {
   switch (e.type) {
     case 'damage':
       for (const ch of targetsOf(c, e, ec)) {
-        const amount = Math.max(0, evalInt(e.amount ?? 0, targetScope(c, ch), c.rng));
+        const amount = Math.max(0, evalInt(e.amount ?? 0, amountScope(c, ch, ec), c.rng));
         ch.hp = Math.max(0, ch.hp - amount);
         c.events.push({ type: 'damaged', playerId: ch.id, amount, hp: ch.hp });
       }
@@ -642,7 +787,7 @@ function applyEffect(c: Ctx, e: Effect, ec: EffectCtx): void {
     case 'heal':
       for (const ch of targetsOf(c, e, ec)) {
         const max = maxHp(index, ch);
-        const amount = Math.max(0, Math.min(max - ch.hp, evalInt(e.amount ?? 0, targetScope(c, ch), c.rng)));
+        const amount = Math.max(0, Math.min(max - ch.hp, evalInt(e.amount ?? 0, amountScope(c, ch, ec), c.rng)));
         ch.hp += amount;
         c.events.push({ type: 'healed', playerId: ch.id, amount, hp: ch.hp });
       }
@@ -716,7 +861,8 @@ function applyEffect(c: Ctx, e: Effect, ec: EffectCtx): void {
       return;
     }
     case 'resetCooldowns':
-      // Cooldowns only matter in combat (milestone 3).
+      // In combat, cooldowns reset with the fight; out of it, so do once-per-card skills.
+      s.usedThisCard = (s.usedThisCard ?? []).filter((k) => !targetsOf(c, e, ec).some((ch) => k.startsWith(`${ch.id}:`)));
       return;
     default:
       // Movement and summons need the grid (milestone 3).

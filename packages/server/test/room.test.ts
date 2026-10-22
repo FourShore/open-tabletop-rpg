@@ -34,6 +34,13 @@ async function until(check: () => boolean, ms = 3000) {
 }
 
 describe('game room', () => {
+  it('has nothing to download before a scenario ends', async () => {
+    const screen = watch(await client.create('table', { token: 'tv-save', role: 'screen' }));
+    const res = await fetch(`http://localhost:${server.port}/save/${screen.room.roomId}`);
+    expect(res.status).toBe(404);
+    await screen.room.leave();
+  });
+
   it('serves the pack assets and a health check', async () => {
     const health = await fetch(`http://localhost:${server.port}/healthz`).then((r) => r.json());
     expect(health).toEqual({ ok: true, pack: 'core.hollow-road' });

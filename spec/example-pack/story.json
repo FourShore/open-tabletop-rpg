@@ -93,6 +93,45 @@
         { "type": "grant", "target": "party", "xp": 15, "gold": 30, "split": "each" },
         { "type": "endScenario", "result": "victory", "unlock": ["hollow-road-2"] }
       ],
+      "onDefeat": [{ "type": "endScenario", "result": "defeat" }] },
+
+    { "id": "captains-ledger", "type": "story", "title": "The Captain's Ledger", "image": "img.camp",
+      "text": "Vessa kept neat books. Every stolen wagon was sold on to the Grey Abbey above Ashford, paid for in old church silver.",
+      "outcomes": [{ "type": "grant", "target": "party", "xp": 2, "split": "each" }] },
+    { "id": "abbey-gate", "type": "check", "title": "The Barred Gate",
+      "text": "The abbey gate is barred from inside. The wall beside it is old, and crumbling.",
+      "check": { "stat": ["str", "dex"], "dc": 12, "mode": "best" },
+      "onSuccess": [{ "type": "narrate", "text": "Stone shifts, and you are over before anyone hears." }, { "type": "grant", "target": "party", "xp": 3, "split": "each" }],
+      "onFailure": [{ "type": "damage", "target": "roller", "amount": "1d6" }, { "type": "setFlag", "flag": "abbey-alerted", "scope": "scenario" }] },
+    { "id": "frightened-novice", "type": "choice", "title": "The Frightened Novice", "vote": "majority",
+      "text": "A boy in a grey habit drops his lantern. \"Please. I only sweep the chapel. The abbot is below, in the crypt.\"",
+      "options": [
+        { "label": "Let him go",
+          "outcomes": [{ "type": "setFlag", "flag": "novice-spared" }, { "type": "narrate", "text": "He runs for the town. Someone, at least, will know the truth." }, { "type": "grant", "target": "party", "xp": 3, "split": "each" }] },
+        { "label": "Make him show you the way down",
+          "check": { "stat": "cha", "dc": 12, "mode": "best", "tags": ["persuade"] },
+          "onSuccess": [{ "type": "setFlag", "flag": "knows-crypt", "scope": "scenario" }, { "type": "narrate", "text": "He shows you a side stair that comes out behind the pews." }],
+          "onFailure": [{ "type": "setFlag", "flag": "abbey-alerted", "scope": "scenario" }, { "type": "narrate", "text": "He screams. Bells start ringing below." }] }
+      ] },
+    { "id": "quiet-chapel", "type": "rest", "title": "A Quiet Chapel",
+      "text": "Cold candles and a locked door. Long enough to catch your breath.",
+      "outcomes": [{ "type": "heal", "target": "party", "amount": "maxHp / 2" }, { "type": "resetCooldowns", "target": "party" }] },
+    { "id": "abbey-crypt", "type": "combat", "title": "The Crypt Below", "music": "music.battle",
+      "text": "The abbot stands at the altar among the stolen silver. Behind him, the dead get up.",
+      "combat": {
+        "map": "abbey-crypt",
+        "spawns": [
+          { "enemy": "hollow-abbot", "at": "altar" },
+          { "enemy": "crypt-skeleton", "count": "2 + partySize", "at": "pews", "when": { "not": { "flag": "knows-crypt" } } },
+          { "enemy": "crypt-skeleton", "count": "1 + partySize", "at": "pews", "when": { "flag": "knows-crypt" } },
+          { "enemy": "crypt-skeleton", "count": "partySize", "at": "crypt", "round": 2, "when": { "flag": "abbey-alerted" } }
+        ],
+        "objective": { "kind": "defeatTarget", "target": "hollow-abbot" }
+      },
+      "onVictory": [
+        { "type": "grant", "target": "party", "xp": 20, "gold": 40, "split": "each" },
+        { "type": "endScenario", "result": "victory" }
+      ],
       "onDefeat": [{ "type": "endScenario", "result": "defeat" }] }
   ],
   "cardPools": [
@@ -113,6 +152,16 @@
         { "card": "bandit-scout" },
         { "card": "campfire-rest" },
         { "card": "bandit-camp" }
+      ] },
+    { "id": "hollow-road-2", "name": "Chapter 2: The Grey Abbey", "image": "img.shrine",
+      "recommendedLevel": { "min": 2, "max": 3 }, "partySize": { "min": 1, "max": 6 },
+      "deck": [
+        { "card": "captains-ledger" },
+        { "pool": "pool.road-encounters", "draw": 2 },
+        { "card": "abbey-gate" },
+        { "card": "frightened-novice" },
+        { "card": "quiet-chapel" },
+        { "card": "abbey-crypt" }
       ] }
   ]
 }

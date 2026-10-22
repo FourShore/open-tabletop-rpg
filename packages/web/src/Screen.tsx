@@ -6,9 +6,11 @@ import { useEffect, useState } from 'react';
 import { CombatLists, CombatStage } from './CombatStage';
 import { useTable } from './net';
 import { CardPanel, HeroCard, Log, Missing, PromptSummary, ResultBanner, StatusBar } from './parts';
+import { DownloadSave, LoadSave, useAutosave } from './saves';
 
 export function Screen({ code }: { code: string }) {
-  const { view, status } = useTable(code, 'screen');
+  const { view, status, send, error, clearError } = useTable(code, 'screen');
+  useAutosave(code, view);
   const joinUrl = `${location.origin}/play/${code}`;
   const [qr, setQr] = useState<string>();
   useEffect(() => {
@@ -37,6 +39,11 @@ export function Screen({ code }: { code: string }) {
         </div>
       </header>
 
+      {error && (
+        <div className="error" role="alert" onClick={clearError}>
+          {error}
+        </div>
+      )}
       {!view ? (
         <p className="muted">Connecting to table {code}…</p>
       ) : view.phase === 'lobby' ? (
@@ -58,12 +65,29 @@ export function Screen({ code }: { code: string }) {
               ))}
             </div>
             {view.heroes.length > 0 && <p className="muted">Start the game from any phone when everyone is in.</p>}
+            {view.campaign.started ? (
+              <div className="panel campaign-note">
+                <p>
+                  <b>Campaign in progress.</b> Heroes keep their levels, gold and gear.
+                  {view.heroes.some((h) => h.claimable) && ' Heroes marked “no player” can be taken over from any phone.'}
+                </p>
+                <DownloadSave code={code} view={view} />
+              </div>
+            ) : (
+              <LoadSave view={view} send={send} />
+            )}
           </div>
         </section>
       ) : (
         <section className="table">
           <div className="stage">
             <ResultBanner view={view} />
+            {view.phase === 'ended' && (
+              <div className="row end-actions">
+                <DownloadSave code={code} view={view} />
+                <span className="muted small">Continue from any phone.</span>
+              </div>
+            )}
             {view.combat ? (
               <CombatStage view={view} combat={view.combat} />
             ) : (

@@ -16,7 +16,7 @@ async function takeTurn(page: Page): Promise<boolean> {
   const buttons = page.locator('section.actions button:enabled');
   if ((await buttons.count()) === 0) return false;
   const text = (await buttons.first().textContent()) ?? '';
-  if (/play again/i.test(text)) return false;
+  if (/^play /i.test(text)) return false;
   await buttons.first().click();
   return true;
 }
@@ -89,10 +89,32 @@ test('a screen and two phones play a scenario to the end', async ({ browser }) =
   expect(sawFight).toBe(true);
   await expect(screen.locator('button')).toHaveCount(0);
 
-  // Both phones get the result and can start another run.
+  // Both phones get the result. Heroes keep what they earned: gear can be swapped, and the campaign saved.
   await expect(ana.locator('.result')).toBeVisible();
-  await ana.getByRole('button', { name: /play again/i }).click();
-  await expect(screen.locator('.result')).toHaveCount(0);
+  await ana.getByText('Gear and items').click();
+  await expect(ana.locator('.gear .items li').first()).toBeVisible();
+  const download = screen.getByRole('link', { name: 'Download save' });
+  await expect(download).toBeVisible();
+  const save = await (await screen.request.get(`/save/${code}`)).json();
+  expect(save.campaign.party.map((h: { name: string }) => h.name)).toEqual(['Ana', 'Ben']);
+
+  // The main screen remembers the campaign, so a new table can pick it up and phones claim the heroes.
+  await screen.goto('/');
+  await screen.getByRole('button', { name: /open the main screen/i }).click();
+  await expect(screen).toHaveURL(/\/screen\/[A-Z]{4}$/);
+  const code2 = screen.url().slice(-4);
+  await screen.getByRole('button', { name: /resume your last campaign/i }).click();
+  await expect(screen.locator('.hero')).toHaveCount(2);
+  await expect(screen.locator('.hero[data-hero="Ana"] .tag')).toHaveText('no player');
+  await expect(screen.locator('.campaign-note')).toBeVisible();
+  const cy = await (await browser.newContext({ ...phone })).newPage();
+  await cy.goto(`/play/${code2}`);
+  await cy.getByRole('button', { name: 'Play as Ana' }).click();
+  await expect(cy.getByRole('button', { name: /remove ana/i })).toBeVisible();
+  await cy.getByRole('button', { name: 'Play as Ben' }).click();
+  await cy.getByRole('button', { name: /^start/i }).click();
+  await expect(screen.locator('.log li').first()).toContainText('begins');
+  await expect(screen.locator('.hero[data-hero="Ana"]')).toContainText(`lv ${save.campaign.party[0].level}`);
 });
 
 test('a phone that reloads keeps its hero', async ({ browser }) => {

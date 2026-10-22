@@ -2,9 +2,9 @@
 // phone gets the same plus which heroes it controls and its own secret rolls.
 // The web client imports these types, so keep them plain JSON.
 
-import { describeTile, mapOf, maxHp, statOf, text, xpForLevel, type Character, type GameState, type HeroCombatOptions, type PackIndex, type Point, type Prompt } from '@otrpg/engine';
+import { describeTile, mapOf, maxHp, statOf, text, xpForLevel, type Character, type GameState, type HeroCombatOptions, type HeroUse, type PackIndex, type Point, type Prompt } from '@otrpg/engine';
 
-export type { AbilityOption, HeroCombatOptions, Point } from '@otrpg/engine';
+export type { AbilityOption, HeroCombatOptions, HeroUse, Point } from '@otrpg/engine';
 
 export interface HeroView {
   id: string;
@@ -23,13 +23,28 @@ export interface HeroView {
   conditions: string[];
   skills: string[];
   items: string[];
+  /** Worn gear, by slot. */
+  equipment: (ItemView & { slot: string })[];
+  /** Carried items, stacked. */
+  inventory: (ItemView & { count: number; equippable: boolean })[];
+  /** Items and skills this hero could use between cards right now. */
+  uses: HeroUse[];
+  /** True when no connected phone plays this hero, so any phone may take it over. */
+  claimable: boolean;
+}
+
+export interface ItemView {
+  itemId: string;
+  name: string;
+  /** One line for players: the slot, what it changes, and the pack's description. */
+  details: string;
 }
 
 export type PromptView =
   | { kind: 'vote'; rule: string; options: { label: string; enabled: boolean; voters: string[] }[] }
   | { kind: 'chooseRoller'; stats: string[]; dc: string }
   | { kind: 'combat'; enemies: { name: string; count: number }[] }
-  | { kind: 'shop'; stock: { itemId: string; name: string; price: number; qty: number }[] }
+  | { kind: 'shop'; stock: (ItemView & { price: number; qty: number })[] }
   | { kind: 'levelUp'; heroId: string; level: number; tiles: { label: string; anyStat: boolean }[]; freeRerolls: number; rerollCost?: number };
 
 export interface UnitView {
@@ -75,6 +90,7 @@ export interface LogLine {
 
 export interface PublicView {
   code: string;
+  packId: string;
   packName: string;
   phase: 'lobby' | 'playing' | 'ended';
   result?: 'victory' | 'defeat';
@@ -83,6 +99,8 @@ export interface PublicView {
   scenarios: { id: string; name: string }[];
   scenarioId?: string;
   scenarioName?: string;
+  /** After a scenario ends: what starting again will play (the one a win unlocked, or a retry). */
+  nextScenario?: { id: string; name: string };
   stats: string[];
   heroes: HeroView[];
   card?: { title: string; text: string; type: string; image?: string };
@@ -94,6 +112,8 @@ export interface PublicView {
   combat?: CombatView;
   /** Phones and screens currently connected. */
   devices: { controllers: number; screens: number };
+  /** started: a scenario has been finished, so heroes carry progress. canSave: a save can be downloaded now. */
+  campaign: { started: boolean; canSave: boolean };
 }
 
 export interface ControllerView extends PublicView {
@@ -110,7 +130,7 @@ export interface ScreenView extends PublicView {
 
 export type View = ControllerView | ScreenView;
 
-export function heroView(index: PackIndex, ch: Character, online: boolean): HeroView {
+export function heroView(index: PackIndex, ch: Character, online: boolean, uses: HeroUse[] = [], claimable = false): HeroView {
   const maxLevel = index.pack.rules?.leveling?.maxLevel ?? 20;
   return {
     id: ch.id,
@@ -128,7 +148,27 @@ export function heroView(index: PackIndex, ch: Character, online: boolean): Hero
     conditions: ch.conditions.map((c) => text(index.conditions.get(c.id)?.name) || c.id),
     skills: ch.skills.map((s) => text(index.skills.get(s)?.name) || s),
     items: [...Object.values(ch.equipment), ...ch.inventory].map((i) => text(index.items.get(i)?.name) || i),
+    equipment: Object.entries(ch.equipment).map(([slot, id]) => ({ ...itemView(index, id), slot })),
+    inventory: [...new Set(ch.inventory)].map((id) => {
+      const item = index.items.get(id);
+      const equippable = item?.kind === 'equipment' && !!item.slot && (!item.classes || item.classes.includes(ch.classId));
+      return { ...itemView(index, id), count: ch.inventory.filter((x) => x === id).length, equippable };
+    }),
+    uses,
+    claimable,
   };
+}
+
+export function itemView(index: PackIndex, id: string): ItemView {
+  const item = index.items.get(id);
+  if (!item) return { itemId: id, name: id, details: '' };
+  const mods = Object.entries(item.modifiers ?? {}).map(([k, v]) => {
+    const key = index.abilityStats.includes(k) ? k.toUpperCase() : k.replace(/([A-Z])/g, ' $1').toLowerCase();
+    return typeof v === 'number' ? `${v >= 0 ? '+' : ''}${v} ${key}` : `${key} ${v}`;
+  });
+  const only = item.classes?.length ? `${item.classes.map((c) => text(index.classes.get(c)?.name) || c).join('/')} only` : '';
+  const kind = item.slot ? item.slot[0].toUpperCase() + item.slot.slice(1) : item.kind === 'consumable' ? 'Consumable' : item.kind === 'quest' ? 'Quest item' : '';
+  return { itemId: id, name: text(item.name) || id, details: [kind, ...mods, only, text(item.description)].filter(Boolean).join(' · ') };
 }
 
 export function promptView(index: PackIndex, p: Prompt): PromptView {
@@ -151,7 +191,7 @@ export function promptView(index: PackIndex, p: Prompt): PromptView {
         enemies: p.enemies.map((e) => ({ name: text(index.pack.enemies?.find((en) => en.id === e.enemy)?.name) || e.enemy, count: e.count })),
       };
     case 'shop':
-      return { kind: 'shop', stock: p.stock.map((e) => ({ ...e, name: text(index.items.get(e.itemId)?.name) || e.itemId })) };
+      return { kind: 'shop', stock: p.stock.map((e) => ({ ...itemView(index, e.itemId), price: e.price, qty: e.qty })) };
     case 'levelUp':
       return {
         kind: 'levelUp',

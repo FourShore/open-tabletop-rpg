@@ -212,6 +212,7 @@ export interface ItemDef {
   id: string;
   name: Text;
   kind: 'equipment' | 'consumable' | 'quest';
+  description?: Text;
   slot?: string;
   rarity?: string;
   price?: number;
@@ -300,6 +301,8 @@ export interface Campaign {
   startingLevel?: number;
   startingGold?: number;
   startScenarios?: string[];
+  /** What heroes keep from one scenario to the next. */
+  persistBetweenScenarios?: ('hp' | 'items' | 'gold' | 'xp' | 'conditions')[];
 }
 
 export interface Pack {
