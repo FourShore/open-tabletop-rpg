@@ -14,8 +14,10 @@ import {
   maxHp,
   modifier,
   statOf,
+  type ActiveCondition,
   type Character,
 } from './character';
+import { combatAct, CombatError, createCombat, endCombat, type CombatAction, type CombatCtx, type CombatEvent, type CombatState } from './combat';
 import { evalExpr, evalInt, type Scope } from './expr';
 import { applyTile, drawLevelUpTiles, type Tile } from './leveling';
 import { text, type PackIndex } from './pack';
@@ -60,6 +62,10 @@ export interface GameState {
   current?: string;
   pending: Prompt | null;
   cardsResolved: number;
+  /** The fight in progress while the pending prompt is `combat`. */
+  combat?: CombatState;
+  /** `heroId:skillId` -> uses this scenario, for usesPerScenario. */
+  skillUses: Record<string, number>;
 }
 
 export type GameEvent =
@@ -87,13 +93,16 @@ export type GameEvent =
   | { type: 'levelUpOffered'; playerId: string; level: number; tiles: Tile[]; rerollCost?: number }
   | { type: 'tilesRerolled'; playerId: string; gold: number; tiles: Tile[]; rerollCost?: number }
   | { type: 'leveledUp'; playerId: string; level: number; tile: Tile; stat?: string }
-  | { type: 'scenarioEnded'; result: 'victory' | 'defeat'; unlocked: string[] };
+  | { type: 'scenarioEnded'; result: 'victory' | 'defeat'; unlocked: string[] }
+  | CombatEvent;
 
 export type Action =
   | { type: 'next' }
   | { type: 'vote'; playerId: string; option: number }
   | { type: 'chooseRoller'; playerId: string; stat?: string }
+  /** Ends the fight without playing it: for tests and a future game master. */
   | { type: 'resolveCombat'; victory: boolean }
+  | CombatAction
   | { type: 'buy'; playerId: string; itemId: string }
   | { type: 'leaveShop' }
   | { type: 'pickTile'; playerId: string; index: number; stat?: string }
@@ -129,6 +138,7 @@ export function newGame(index: PackIndex, opts: { seed: number; players: PlayerS
     discard: [],
     pending: null,
     cardsResolved: 0,
+    skillUses: {},
   };
 }
 
@@ -137,7 +147,7 @@ export function startScenario(index: PackIndex, state: GameState, scenarioId: st
     const sc = index.scenarios.get(scenarioId);
     if (!sc) throw new GameError(`Unknown scenario '${scenarioId}'`);
     const s = c.s;
-    Object.assign(s, { phase: 'playing', result: undefined, scenarioId, scenarioFlags: [], deck: [], discard: [], current: undefined, pending: null });
+    Object.assign(s, { phase: 'playing', result: undefined, scenarioId, scenarioFlags: [], deck: [], discard: [], current: undefined, pending: null, combat: undefined, skillUses: {} });
     const ctx = partyWhen(c);
     for (const entry of sc.deck) {
       if ('card' in entry) {
@@ -178,18 +188,24 @@ export function act(index: PackIndex, state: GameState, action: Action): StepRes
         rollAndBranch(c, p.check, p.branches, [ch], action.stat, p.chooserId);
         return finishCard(c);
       }
-      case 'resolveCombat': {
+      case 'resolveCombat':
         if (p?.kind !== 'combat') throw new GameError('No combat is running');
-        s.pending = null;
-        c.events.push({ type: 'combatEnded', victory: action.victory });
-        if (action.victory) {
-          // Downed heroes get back up after a won fight.
-          for (const ch of s.party) if (ch.hp <= 0) ch.hp = 1;
-          applyEffects(c, p.onVictory, {});
-        } else {
-          applyEffects(c, p.onDefeat ?? [{ type: 'endScenario', result: 'defeat' }], {});
+        return finishCombat(c, p, action.victory);
+      case 'move':
+      case 'useSkill':
+      case 'useItem':
+      case 'revive':
+      case 'endTurn': {
+        if (p?.kind !== 'combat') throw new GameError('No combat is running');
+        let result;
+        try {
+          result = combatAct(combatCtx(c), action);
+        } catch (e) {
+          if (e instanceof CombatError) throw new GameError(e.message);
+          throw e;
         }
-        return finishCard(c);
+        if (result) finishCombat(c, p, result === 'victory');
+        return;
       }
       case 'buy': {
         if (p?.kind !== 'shop') throw new GameError('No shop is open');
@@ -244,6 +260,7 @@ export function waitingOn(state: GameState): string[] {
   const p = state.pending;
   if (!p) return [];
   if (p.kind === 'levelUp') return [p.playerId];
+  if (p.kind === 'combat') return state.combat?.phase === 'heroes' ? state.combat.units.filter((u) => u.side === 'hero' && !u.done && !u.down).map((u) => u.id) : [];
   if (p.kind === 'vote') {
     const alive = state.party.map((ch) => ch.id);
     return p.rule === 'leader' ? [state.party[0].id] : alive.filter((id) => !(id in p.votes));
@@ -356,14 +373,49 @@ function resolveCard(c: Ctx, card: Card): void {
 }
 
 function startCombat(c: Ctx, spec: CombatSpec, onVictory: Effect[], onDefeat?: Effect[]): void {
-  const ctx = partyWhen(c);
-  const scope = partyScope(c);
-  const enemies = spec.spawns
-    .filter((sp) => evalWhen(sp.when, ctx))
-    .map((sp) => ({ enemy: sp.enemy, count: evalInt(sp.count ?? 1, scope, c.rng), ...(sp.round ? { round: sp.round } : {}) }))
-    .filter((e) => e.count > 0);
-  c.s.pending = { kind: 'combat', cardId: c.s.current ?? '', map: spec.map, enemies, onVictory, onDefeat };
-  c.events.push({ type: 'combatStarted', map: spec.map, enemies: enemies.map(({ enemy, count }) => ({ enemy, count })) });
+  const cardId = c.s.current ?? '';
+  c.s.pending = { kind: 'combat', cardId, map: spec.map, enemies: [], onVictory, onDefeat };
+  const cs = createCombat(combatCtx(c), cardId, spec);
+  const counts = new Map<string, number>();
+  for (const u of cs.units) if (u.enemyId) counts.set(u.enemyId, (counts.get(u.enemyId) ?? 0) + 1);
+  for (const w of cs.waves) counts.set(w.enemy, (counts.get(w.enemy) ?? 0) + w.count);
+  const enemies = [...counts].map(([enemy, count]) => ({ enemy, count }));
+  c.s.pending.enemies = enemies;
+  // Spawn events come before this in the log, so announce the fight first.
+  const at = c.events.findIndex((e) => e.type === 'roundStarted' || e.type === 'unitSpawned');
+  c.events.splice(at < 0 ? c.events.length : at, 0, { type: 'combatStarted', map: spec.map, enemies });
+}
+
+function combatCtx(c: Ctx): CombatCtx {
+  return {
+    index: c.index,
+    s: c.s,
+    rng: c.rng,
+    events: c.events,
+    reward: (heroId, xp, loot) => {
+      const ch = player(c, heroId);
+      if (xp) {
+        ch.xp += xp;
+        c.events.push({ type: 'gained', playerId: ch.id, xp });
+      }
+      if (loot) rollLoot(c, loot, ch);
+    },
+  };
+}
+
+function finishCombat(c: Ctx, p: Extract<Prompt, { kind: 'combat' }>, victory: boolean): void {
+  const s = c.s;
+  s.pending = null;
+  endCombat(combatCtx(c));
+  c.events.push({ type: 'combatEnded', victory });
+  if (victory) {
+    // Downed heroes get back up after a won fight.
+    for (const ch of s.party) if (ch.hp <= 0) ch.hp = 1;
+    applyEffects(c, p.onVictory, {});
+  } else {
+    applyEffects(c, p.onDefeat ?? [{ type: 'endScenario', result: 'defeat' }], {});
+  }
+  finishCard(c);
 }
 
 /** Close out the current card, then offer any level-ups. */
@@ -376,11 +428,11 @@ function finishCard(c: Ctx): void {
     s.cardsResolved += 1;
     // Out of combat, condition durations count cards.
     for (const ch of s.party) {
-      for (const cond of ch.conditions) if (cond.remaining !== undefined) cond.remaining -= 1;
-      for (const cond of ch.conditions.filter((x) => x.remaining !== undefined && x.remaining <= 0)) {
-        c.events.push({ type: 'conditionRemoved', playerId: ch.id, condition: cond.id });
-      }
-      ch.conditions = ch.conditions.filter((x) => x.remaining === undefined || x.remaining > 0);
+      const ticking = (x: ActiveCondition) => x.per !== 'round' && x.remaining !== undefined;
+      for (const cond of ch.conditions) if (ticking(cond)) cond.remaining! -= 1;
+      const expired = ch.conditions.filter((x) => ticking(x) && x.remaining! <= 0);
+      for (const cond of expired) c.events.push({ type: 'conditionRemoved', playerId: ch.id, condition: cond.id });
+      ch.conditions = ch.conditions.filter((x) => !expired.includes(x));
       ch.hp = Math.min(ch.hp, maxHp(index, ch));
     }
   }

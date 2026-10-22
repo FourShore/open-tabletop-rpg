@@ -3,6 +3,7 @@
 
 import type { ControllerView, HeroView, PromptView } from '@otrpg/server/view';
 import { useState } from 'react';
+import { CombatControls } from './CombatControls';
 import { useTable } from './net';
 import { CardPanel, HeroCard, Log, Missing, PromptSummary, ResultBanner, StatusBar } from './parts';
 
@@ -119,6 +120,14 @@ function Lobby({ view, send }: { view: ControllerView; send: Send }) {
 function Play({ view, send, act }: { view: ControllerView; send: Send; act: (a: Record<string, unknown>) => void }) {
   // Heroes whose phone dropped can be played by anyone, so the table doesn't stall.
   const mine = view.heroes.filter((h) => view.mine.includes(h.id) || !h.online);
+  if (view.combat && view.phase === 'playing' && view.prompt?.kind === 'combat') {
+    return (
+      <>
+        <CombatControls view={view} act={act} />
+        <Log lines={view.log} limit={8} />
+      </>
+    );
+  }
   return (
     <>
       <ResultBanner view={view} />
@@ -196,14 +205,7 @@ function PromptActions({ view, prompt: p, mine, act }: { view: ControllerView; p
       );
     }
     case 'combat':
-      return (
-        <>
-          <button className="primary" onClick={() => act({ type: 'resolveCombat', victory: true })}>
-            We won the fight
-          </button>
-          <button onClick={() => act({ type: 'resolveCombat', victory: false })}>We were defeated</button>
-        </>
-      );
+      return null;
     case 'shop': {
       const who = mine.find((h) => h.id === buyer) ?? mine[0];
       return (

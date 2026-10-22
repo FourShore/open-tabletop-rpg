@@ -8,10 +8,17 @@ import { text, type PackIndex } from './pack';
 export interface FormatOptions {
   /** Show the numbers of secret checks (only for the roller's own controller). */
   revealSecret?: boolean;
+  /**
+   * Names of combat units seen so far (from `unitSpawned` events). The fight is
+   * gone from the state by the time its last events are described.
+   */
+  names?: Map<string, string>;
 }
 
 export function describeEvent(index: PackIndex, state: GameState, e: GameEvent, opts: FormatOptions = {}): string | null {
-  const who = 'playerId' in e ? (state.party.find((p) => p.id === e.playerId)?.name ?? e.playerId) : '';
+  const nameOf = (id: string) =>
+    state.party.find((p) => p.id === id)?.name ?? state.combat?.units.find((u) => u.id === id)?.name ?? opts.names?.get(id) ?? id;
+  const who = 'playerId' in e ? nameOf(e.playerId) : 'unitId' in e ? nameOf(e.unitId) : '';
   const itemName = (id: string) => text(index.items.get(id)?.name) || id;
   switch (e.type) {
     case 'scenarioStarted':
@@ -66,6 +73,38 @@ export function describeEvent(index: PackIndex, state: GameState, e: GameEvent, 
       return `${who} ${e.gold ? `pays ${e.gold} gold to reroll` : 'rerolls'} the level-up tiles.`;
     case 'leveledUp':
       return `${who} is now level ${e.level}: ${describeTile(index, e.tile)}${e.stat ? ` (${e.stat.toUpperCase()})` : ''}.`;
+    case 'roundStarted':
+      return `Round ${e.round}. Heroes, your move.`;
+    case 'enemyPhase':
+      return 'The enemies act.';
+    case 'unitSpawned':
+      return state.combat && state.combat.round > 1 ? `${e.name} joins the fight!` : null;
+    case 'unitMoved':
+      return null;
+    case 'skillUsed':
+      return `${who} uses ${e.name}${e.targets.length === 1 && e.targets[0] !== e.unitId ? ` on ${nameOf(e.targets[0])}` : e.targets.length > 1 ? ` (${e.targets.length} targets)` : ''}.`;
+    case 'itemUsed':
+      return `${who} uses ${e.name}.`;
+    case 'attackRolled':
+      return `${who} attacks ${nameOf(e.targetId)}: ${e.natural} on the die, ${e.total} vs defense ${e.defense}. ${e.critical ? 'Critical hit!' : e.hit ? 'Hit.' : 'Miss.'}`;
+    case 'saveRolled':
+      return `${who} saves: ${e.total} vs DC ${e.dc}. ${e.saved ? 'Saved.' : 'Failed.'}`;
+    case 'unitDamaged':
+      return `${who} takes ${e.amount}${e.damageType ? ` ${e.damageType}` : ''} damage (${e.hp} HP left).`;
+    case 'unitHealed':
+      return e.amount ? `${who} heals ${e.amount} (${e.hp} HP).` : null;
+    case 'unitCondition':
+      return e.on ? `${who} is ${e.condition}${e.duration ? ` for ${e.duration} round${e.duration === 1 ? '' : 's'}` : ''}.` : `${who} is no longer ${e.condition}.`;
+    case 'unitDown':
+      return `${who} is down!`;
+    case 'unitDied':
+      return `${who} is defeated.`;
+    case 'revived':
+      return e.success ? `${nameOf(e.byId)} gets ${who} back on their feet (${e.total} vs DC ${e.dc}).` : `${nameOf(e.byId)} fails to revive ${who} (${e.total} vs DC ${e.dc}).`;
+    case 'turnEnded':
+      return null;
+    case 'turnSkipped':
+      return `${who} loses their turn.`;
     case 'scenarioEnded':
       return e.result === 'victory' ? `Scenario complete!${e.unlocked.length ? ` Unlocked: ${e.unlocked.map((id) => text(index.scenarios.get(id)?.name) || id).join(', ')}.` : ''}` : 'The party has fallen. Scenario failed.';
   }

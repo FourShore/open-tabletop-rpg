@@ -9,3 +9,5 @@ export * from './character';
 export * from './leveling';
 export * from './game';
 export * from './format';
+export * from './combat';
+export * from './tactics';

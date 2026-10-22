@@ -30,8 +30,10 @@ Tables live in memory, so a server restart ends running games for now.
 
 - `packages/engine`: the rules engine, a pure TypeScript state machine that
   loads and validates a pack and runs its event deck (cards, checks, votes,
-  shops, rewards, level-up tile draws). Grid combat is not built yet; combat
-  cards pause and a phone reports the result.
+  shops, rewards, level-up tile draws) and grid combat: two actions per hero,
+  skills with range, areas and line of sight, attack and save rolls,
+  conditions, cover, downed heroes and revives, and enemies that show their
+  intent before acting on it.
 - `packages/server`: Colyseus rooms joined by code. Each device keeps a token
   in localStorage, so a phone that reloads gets its heroes back. The screen
   and each phone get their own view (secret rolls only reach the roller).
@@ -50,7 +52,7 @@ npm run play -- --auto --seed 42           # watch it play itself
 
 1. Engine + spec (done)
 2. Rooms: main screen and phone controllers over WebSockets (done)
-3. Grid combat
+3. Grid combat (done)
 4. Progression: inventory, shop UI, campaign saves
 5. Open ecosystem: pack loading by URL, a pack gallery, an editor
 
