@@ -106,7 +106,6 @@ function PromptBody({ p, name }: { p: PromptView; name: (id: string) => string }
         <>
           <h3>Combat!</h3>
           <p>{p.enemies.map((e) => `${e.count} × ${e.name}`).join(', ')}</p>
-          <p className="muted small">Grid combat arrives in the next update. For now, report the result from a phone.</p>
         </>
       );
     case 'shop':

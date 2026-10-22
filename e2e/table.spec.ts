@@ -12,6 +12,7 @@ async function joinAs(page: Page, code: string, name: string, cls: string) {
 
 /** Click the first thing this phone can do right now. Returns false if it had nothing to do. */
 async function takeTurn(page: Page): Promise<boolean> {
+  if (await page.locator('.combat-controls').isVisible()) return fightTurn(page);
   const buttons = page.locator('section.actions button:enabled');
   if ((await buttons.count()) === 0) return false;
   const text = (await buttons.first().textContent()) ?? '';
@@ -20,7 +21,32 @@ async function takeTurn(page: Page): Promise<boolean> {
   return true;
 }
 
+/** In a fight: use an ability if one is ready, otherwise step closer once, otherwise end the turn. */
+async function fightTurn(page: Page): Promise<boolean> {
+  const end = page.getByRole('button', { name: /^end .*turn$/i });
+  if (!(await end.isVisible())) return false;
+  const abilities = page.locator('.ability-grid button:enabled', { hasNotText: /^(Move|Revive)/ });
+  const lit = page.locator('.grid-svg rect.cell.lit');
+  if ((await abilities.count()) > 0) {
+    await abilities.first().click();
+    if (await page.locator('.mode-hint').isVisible()) {
+      if ((await lit.count()) === 0) return (await page.getByRole('button', { name: 'Cancel' }).click(), end.click(), true);
+      await lit.first().click({ force: true });
+    }
+    return true;
+  }
+  const move = page.locator('.ability-grid button:enabled', { hasText: /^Move/ });
+  if ((await move.count()) > 0 && !(await page.locator('.combat-status').textContent())?.includes('1 action')) {
+    await move.click();
+    await lit.last().click({ force: true });
+    return true;
+  }
+  await end.click();
+  return true;
+}
+
 test('a screen and two phones play a scenario to the end', async ({ browser }) => {
+  test.setTimeout(240_000);
   const screen = await (await browser.newContext()).newPage();
   await screen.goto('/');
   await screen.getByRole('button', { name: /open the main screen/i }).click();
@@ -41,16 +67,26 @@ test('a screen and two phones play a scenario to the end', async ({ browser }) =
   // Play it out. Each phone only ever sees buttons for its own hero.
   let sawCard = false;
   let sawVote = false;
-  for (let i = 0; i < 300; i++) {
+  let sawFight = false;
+  for (let i = 0; i < 1500; i++) {
     if (await screen.locator('.result').isVisible()) break;
     if (await screen.locator('.card h2').isVisible()) sawCard = true;
     if ((await screen.locator('.prompt .chip').count()) > 0) sawVote = true;
+    if (!sawFight && (await screen.locator('.combat-stage').isVisible())) {
+      sawFight = true;
+      // The board and both heroes are on the main screen, with enemy intents.
+      await expect(screen.locator('.board-wrap canvas, .board-wrap svg').first()).toBeVisible();
+      await expect(screen.locator('.units li[data-unit="Ana"]')).toBeVisible();
+      await expect(screen.locator('.enemies .intent').first()).toBeVisible();
+      await expect(ana.locator('.grid-svg')).toBeVisible();
+    }
     const acted = (await takeTurn(ana)) || (await takeTurn(ben));
     await screen.waitForTimeout(acted ? 60 : 200);
   }
   await expect(screen.locator('.result')).toBeVisible();
   expect(sawCard).toBe(true);
   expect(sawVote).toBe(true);
+  expect(sawFight).toBe(true);
   await expect(screen.locator('button')).toHaveCount(0);
 
   // Both phones get the result and can start another run.

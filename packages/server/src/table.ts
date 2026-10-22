@@ -10,6 +10,7 @@ import {
   createCharacter,
   describeEvent,
   GameError,
+  heroCombatOptions,
   newGame,
   startScenario,
   text,
@@ -19,7 +20,7 @@ import {
   type GameState,
   type PackIndex,
 } from '@otrpg/engine';
-import { heroView, promptView, type LogLine, type View } from './view';
+import { combatView, heroView, promptView, type LogLine, type View } from './view';
 
 export const MAX_HEROES = 6;
 const LOG_LIMIT = 100;
@@ -54,8 +55,8 @@ export interface TableOptions {
 }
 
 /** Actions any phone may send: they move the table along without speaking for a hero. */
-const SHARED_ACTIONS = new Set<Action['type']>(['next', 'resolveCombat', 'leaveShop']);
-const HERO_ACTIONS = new Set<Action['type']>(['vote', 'chooseRoller', 'buy', 'pickTile', 'rerollTiles']);
+const SHARED_ACTIONS = new Set<Action['type']>(['next', 'leaveShop']);
+const HERO_ACTIONS = new Set<Action['type']>(['vote', 'chooseRoller', 'buy', 'pickTile', 'rerollTiles', 'move', 'useSkill', 'useItem', 'revive', 'endTurn']);
 
 export class Table {
   readonly code: string;
@@ -65,6 +66,8 @@ export class Table {
   private state: GameState | null = null;
   private scenarioId: string;
   private log: LogEntry[] = [];
+  /** Combat unit names, so a fight's last lines still name the fallen. */
+  private names = new Map<string, string>();
   /** The last card turned over. It stays on screen after it resolves, until the next one. */
   private shownCard?: string;
   private nextLog = 1;
@@ -184,12 +187,13 @@ export class Table {
     for (const e of events) {
       if (e.type === 'scenarioStarted') this.shownCard = undefined;
       if (e.type === 'cardRevealed') this.shownCard = e.cardId;
-      const line = describeEvent(this.index, state, e);
+      if (e.type === 'unitSpawned') this.names.set(e.unitId, e.name);
+      const line = describeEvent(this.index, state, e, { names: this.names });
       if (!line) continue;
       const entry: LogEntry = { id: this.nextLog++, text: line };
       if (e.type === 'checkRolled' && e.secret) {
         entry.heroId = e.playerId;
-        entry.secretText = describeEvent(this.index, state, e, { revealSecret: true }) ?? undefined;
+        entry.secretText = describeEvent(this.index, state, e, { revealSecret: true, names: this.names }) ?? undefined;
       }
       this.log.push(entry);
     }
@@ -228,9 +232,14 @@ export class Table {
       prompt: s?.pending ? promptView(this.index, s.pending) : undefined,
       waitingOn: s ? waitingOn(s) : [],
       log: this.log.map((e) => ({ id: e.id, text: e.heroId && mine.includes(e.heroId) && e.secretText ? e.secretText : e.text })),
+      combat: s ? combatView(this.index, s, (k) => this.asset(k)) : undefined,
       devices: { controllers: seats.filter((x) => x.role === 'controller').length, screens: seats.filter((x) => x.role === 'screen').length },
     };
-    return role === 'controller' ? { ...base, role, mine } : { ...base, role: 'screen' };
+    if (role !== 'controller') return { ...base, role: 'screen' };
+    // A phone also plays heroes whose phone is offline (see `owns`).
+    const playable = s?.combat ? s.party.filter((p) => mine.includes(p.id) || !online(p.id)).map((p) => p.id) : [];
+    const combatOptions = playable.map((id) => heroCombatOptions(this.index, s!, id)).filter((o) => o !== undefined);
+    return { ...base, role, mine, combatOptions: s?.combat ? combatOptions : undefined };
   }
 
   /** Every token that should get a view update. */

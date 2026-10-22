@@ -41,6 +41,18 @@ Key conventions
 - **Turns** default to a heroes phase then an enemy phase, with 2 actions per
   hero (`rules.turn`). Moving costs an action, as does a typical ability
   (`cost`). The `actions` modifier grants extra actions.
+- **Combat** happens on the card's `map`. Heroes start on `heroStart`, enemies
+  on their `spawnPoints` (spawns with a `round` arrive later). Movement is in 8
+  directions; terrain `moveCost` slows or blocks it, `blocksSight` stops line
+  of sight, and `defenseBonus` is cover. Each round every enemy picks its
+  intent from its `behavior` (the first rule whose `when` holds) and shows it
+  before the heroes act. Attacks roll `d20 + stat + attack` against defense;
+  saves roll `d20 + saveStat` against the caster's `spellDc`. A hero at 0 HP is
+  down: an adjacent ally can spend an action to revive them (`rules.downed`),
+  and any heal brings them back. Killing an enemy gives the killer its `xp`
+  and rolls its `loot`; the card's `onVictory` rewards come on top.
+- **Durations** count cards outside combat and rounds inside it; a condition
+  gained in a fight ends with the fight.
 - **Stats have no cap** unless `rules.statCap` sets one; scale DCs instead.
 - **Level-ups** can be widened with the `levelUpTiles` modifier and rerolled
   for gold with `rules.leveling.reroll`.

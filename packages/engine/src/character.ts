@@ -5,8 +5,10 @@ import type { WhenContext } from './when';
 
 export interface ActiveCondition {
   id: string;
-  /** Remaining duration. Outside combat it counts down once per card. Undefined = until removed. */
+  /** Remaining duration. Undefined = until removed. */
   remaining?: number;
+  /** What the duration counts: cards (outside combat, the default) or combat rounds. */
+  per?: 'card' | 'round';
 }
 
 export interface Character {

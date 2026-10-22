@@ -66,6 +66,7 @@ export interface Effect {
   duration?: number;
   distance?: Expr;
   enemy?: string;
+  allied?: boolean;
   count?: Expr;
   stat?: string;
   xp?: Expr;
@@ -101,6 +102,9 @@ export interface ConditionDef {
   name: Text;
   positive?: boolean;
   modifiers?: Modifiers;
+  skipTurn?: boolean;
+  preventMove?: boolean;
+  untargetable?: boolean;
   onTurnStart?: Effect[];
   onTurnEnd?: Effect[];
   stacking?: 'refresh' | 'stack' | 'ignore';
@@ -126,6 +130,7 @@ export interface Rules {
   derived?: Record<string, Expr>;
   statCap?: number;
   turn?: { order?: 'sides' | 'initiative'; actionsPerTurn?: number; diagonalCost?: number; showEnemyIntents?: boolean };
+  downed?: { enabled?: boolean; reviveCheck?: CheckSpec; reviveHp?: Expr };
   groupCheckThreshold?: number;
   helpBonus?: number;
   leveling?: Leveling;
@@ -135,6 +140,7 @@ export interface ClassDef {
   id: string;
   name: Text;
   role?: string;
+  token?: string;
   keyStats?: string[];
   baseStats: Record<string, number>;
   hp: { base: number; perLevel: Expr };
@@ -157,7 +163,49 @@ export interface SkillDef {
   modifiers?: Modifiers;
   checkBonus?: Record<string, number>;
   usableOutOfCombat?: boolean;
+  cost?: number;
+  cooldown?: number;
+  usesPerScenario?: number;
+  usesPerCombat?: number;
+  targeting?: Targeting;
+  attack?: { roll?: 'attack' | 'save' | 'auto'; stat?: string; saveStat?: string; bonus?: Expr; halfOnSave?: boolean };
   effects?: Effect[];
+  onMiss?: Effect[];
+  tags?: string[];
+}
+
+export interface Targeting {
+  target?: 'self' | 'ally' | 'enemy' | 'any' | 'tile' | 'allAllies' | 'allEnemies';
+  range?: number;
+  area?: { shape?: 'single' | 'burst' | 'line' | 'cone' | 'ring'; size?: number };
+  maxTargets?: number;
+  lineOfSight?: boolean;
+  friendlyFire?: boolean;
+}
+
+export type Point = [number, number];
+
+export interface TerrainDef {
+  id: string;
+  name?: Text;
+  symbol?: string;
+  image?: string;
+  moveCost?: number;
+  blocksSight?: boolean;
+  defenseBonus?: number;
+  onEnter?: Effect[];
+}
+
+export interface MapDef {
+  id: string;
+  name?: Text;
+  width: number;
+  height: number;
+  background?: string;
+  tiles?: string[];
+  heroStart?: Point[];
+  spawnPoints?: Record<string, Point[]>;
+  exits?: Point[];
 }
 
 export interface ItemDef {
@@ -170,6 +218,7 @@ export interface ItemDef {
   classes?: string[];
   modifiers?: Modifiers;
   grantsSkills?: string[];
+  use?: { cost?: number; targeting?: Targeting; effects?: Effect[] };
 }
 
 export interface LootTable {
@@ -182,14 +231,26 @@ export interface LootTable {
 export interface EnemyDef {
   id: string;
   name: Text;
+  token?: string;
+  size?: number;
+  tags?: string[];
+  stats: Record<string, number>;
   hp: Expr;
+  defense?: Expr;
+  move?: number;
+  skills?: string[];
+  resist?: Record<string, number>;
+  behavior?: { when?: When; do: string; target?: EnemyTargetRule }[];
   xp?: number;
+  loot?: string;
 }
+
+export type EnemyTargetRule = 'nearest' | 'lowestHp' | 'highestHp' | 'highestThreat' | 'random' | 'self' | 'weakestAlly';
 
 export interface CombatSpec {
   map: string;
   spawns: { enemy: string; count?: Expr; at?: string; when?: When; round?: number }[];
-  objective?: { kind?: string; target?: string; rounds?: number };
+  objective?: { kind?: 'defeatAll' | 'defeatTarget' | 'survive' | 'reachExit' | 'protect'; target?: string; rounds?: number };
 }
 
 export interface ChoiceOption {
@@ -252,13 +313,13 @@ export interface Pack {
   rules?: Rules;
   stats?: StatDef[];
   conditions?: ConditionDef[];
-  terrain?: unknown[];
+  terrain?: TerrainDef[];
   classes?: ClassDef[];
   skills?: SkillDef[];
   items?: ItemDef[];
   lootTables?: LootTable[];
   enemies?: EnemyDef[];
-  maps?: unknown[];
+  maps?: MapDef[];
   cards?: Card[];
   cardPools?: { id: string; cards: Weighted[] }[];
   scenarios?: Scenario[];

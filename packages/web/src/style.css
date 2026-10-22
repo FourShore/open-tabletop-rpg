@@ -433,3 +433,133 @@ select {
 .tile {
   text-align: left;
 }
+
+/* combat */
+.combat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.board-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.pixi-board {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.pixi-board canvas {
+  border-radius: 8px;
+  max-width: 100%;
+}
+.grid-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  touch-action: manipulation;
+  user-select: none;
+}
+.screen .grid-svg {
+  max-height: 70vh;
+}
+.grid-svg .cell.lit {
+  cursor: pointer;
+}
+.combat-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.units {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.units li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+.units li .hp {
+  grid-column: 1 / -1;
+}
+.units li.active {
+  border-color: var(--gold);
+}
+.units li.down {
+  opacity: 0.55;
+}
+.intent {
+  color: #e8907c;
+}
+.combat-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.combat-status {
+  font-size: 1.05rem;
+}
+.hero-tabs {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+}
+.hero-tabs button {
+  min-height: 40px;
+  padding: 0.4rem 0.8rem;
+  white-space: nowrap;
+}
+.hero-tabs button.selected {
+  border-color: var(--gold);
+  background: #3a2f1c;
+}
+.ability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.ability-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+}
+.mode-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+}
+.intents {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+aside .combat-lists {
+  grid-template-columns: 1fr;
+  margin-bottom: 1rem;
+}

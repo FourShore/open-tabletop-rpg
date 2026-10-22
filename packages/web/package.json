@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "colyseus.js": "^0.16.22",
+    "pixi.js": "^8.22.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

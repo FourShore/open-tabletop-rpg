@@ -1,4 +1,5 @@
-import { act, newGame, startScenario, type Action, type GameEvent, type GameState, type PlayerSpec } from '../src/game';
+import { act, newGame, startScenario, waitingOn, type Action, type GameEvent, type GameState, type PlayerSpec } from '../src/game';
+import { suggestCombatAction } from '../src/tactics';
 import { loadPackFromDisk } from '../src/node';
 import { indexPack, type PackIndex } from '../src/pack';
 import { createRng } from '../src/rng';
@@ -23,15 +24,15 @@ export function autoPlay(index: PackIndex, seed: number, players = PARTY, scenar
   let r = startScenario(index, state, scenario);
   state = r.state;
   log.push(...r.events);
-  for (let guard = 0; (state.phase === 'playing' || state.pending) && guard < 500; guard++) {
-    r = act(index, state, chooseAction(state, pick.next.bind(pick)));
+  for (let guard = 0; (state.phase === 'playing' || state.pending) && guard < 3000; guard++) {
+    r = act(index, state, chooseAction(index, state, pick.next.bind(pick)));
     state = r.state;
     log.push(...r.events);
   }
   return { state, log };
 }
 
-export function chooseAction(s: GameState, rand: () => number): Action {
+export function chooseAction(index: PackIndex, s: GameState, rand: () => number): Action {
   const p = s.pending;
   if (!p) return { type: 'next' };
   switch (p.kind) {
@@ -43,7 +44,7 @@ export function chooseAction(s: GameState, rand: () => number): Action {
     case 'chooseRoller':
       return { type: 'chooseRoller', playerId: s.party.find((m) => m.hp > 0)!.id };
     case 'combat':
-      return { type: 'resolveCombat', victory: rand() < 0.8 };
+      return suggestCombatAction(index, s, waitingOn(s)[0] ?? s.party[0].id);
     case 'shop':
       return { type: 'leaveShop' };
     case 'levelUp': {

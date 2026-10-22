@@ -3,6 +3,7 @@
 
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
+import { CombatLists, CombatStage } from './CombatStage';
 import { useTable } from './net';
 import { CardPanel, HeroCard, Log, Missing, PromptSummary, ResultBanner, StatusBar } from './parts';
 
@@ -63,15 +64,25 @@ export function Screen({ code }: { code: string }) {
         <section className="table">
           <div className="stage">
             <ResultBanner view={view} />
-            <CardPanel view={view} />
-            <PromptSummary view={view} />
+            {view.combat ? (
+              <CombatStage view={view} combat={view.combat} />
+            ) : (
+              <>
+                <CardPanel view={view} />
+                <PromptSummary view={view} />
+              </>
+            )}
           </div>
           <aside>
-            <div className="party">
-              {view.heroes.map((h) => (
-                <HeroCard key={h.id} hero={h} waiting={waiting.has(h.id)} />
-              ))}
-            </div>
+            {view.combat ? (
+              <CombatLists combat={view.combat} />
+            ) : (
+              <div className="party">
+                {view.heroes.map((h) => (
+                  <HeroCard key={h.id} hero={h} waiting={waiting.has(h.id)} />
+                ))}
+              </div>
+            )}
             <Log lines={view.log} />
           </aside>
         </section>

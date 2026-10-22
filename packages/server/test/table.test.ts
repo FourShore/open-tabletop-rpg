@@ -1,4 +1,4 @@
-import { indexPack, type PackIndex } from '@otrpg/engine';
+import { indexPack, suggestCombatAction, type GameState, type PackIndex } from '@otrpg/engine';
 import { loadPackFromDisk } from '@otrpg/engine/node';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Table, type ControllerView } from '../src/index';
@@ -20,7 +20,7 @@ function table(seed = 7) {
 
 /** Play the table to the end with legal moves, each sent by the phone that owns the hero. */
 function playOut(t: Table, owners: Record<string, string>, onStep?: () => void, stop?: () => boolean) {
-  for (let guard = 0; t.phase === 'playing' && guard < 500; guard++) {
+  for (let guard = 0; t.phase === 'playing' && guard < 3000; guard++) {
     if (stop?.()) return;
     const v = t.viewFor('screen');
     const p = v.prompt;
@@ -32,7 +32,10 @@ function playOut(t: Table, owners: Record<string, string>, onStep?: () => void, 
     } else if (p.kind === 'chooseRoller') {
       const hero = v.heroes.find((h) => h.hp > 0)!;
       t.act(owners[hero.id], { type: 'chooseRoller', playerId: hero.id });
-    } else if (p.kind === 'combat') t.act(first, { type: 'resolveCombat', victory: true });
+    } else if (p.kind === 'combat') {
+      const heroId = v.waitingOn[0];
+      t.act(owners[heroId], suggestCombatAction(t.index, (t as unknown as { state: GameState }).state, heroId));
+    }
     else if (p.kind === 'shop') t.act(first, { type: 'leaveShop' });
     else if (p.kind === 'levelUp') {
       const stat = p.tiles[0].anyStat ? 'str' : undefined;
@@ -130,6 +133,23 @@ describe('play', () => {
     expect(t.viewFor('screen').waitingOn).not.toContain(b);
   });
 
+  it('shows the fight on every device and gives each phone options for its own hero', () => {
+    const t = table(2);
+    const a = t.addHero('ana', 'Ana', 'knight');
+    const b = t.addHero('ben', 'Ben', 'wizard');
+    t.start('ana');
+    playOut(t, { [a]: 'ana', [b]: 'ben' }, undefined, () => t.viewFor('screen').prompt?.kind === 'combat');
+    const screen = t.viewFor('screen');
+    expect(screen.combat?.round).toBe(1);
+    expect(screen.combat?.units.filter((u) => u.side === 'hero').map((u) => u.name)).toEqual(['Ana', 'Ben']);
+    expect(screen.combat?.units.some((u) => u.side === 'enemy' && u.intent?.label)).toBe(true);
+    expect(screen.role === 'screen' && 'combatOptions' in screen).toBe(false);
+    const phone = t.viewFor('ana') as ControllerView;
+    expect(phone.combatOptions?.map((o) => o.heroId)).toEqual([a]);
+    expect(phone.combatOptions?.[0].skills.map((x) => x.id)).toContain('strike');
+    expect(() => t.act('ana', { type: 'endTurn', playerId: b })).toThrow(/not yours/);
+  });
+
   it('shows votes on the screen as they come in', () => {
     let seen = false;
     // Not every run draws a majority vote, so try a few seeds.
@@ -153,6 +173,7 @@ describe('play', () => {
     t.start('ana');
     expect(() => t.act('ana', null)).toThrow(/Bad action/);
     expect(() => t.act('ana', { type: 'cheat' })).toThrow(/Unknown action/);
+    expect(() => t.act('ana', { type: 'resolveCombat', victory: true })).toThrow(/Unknown action/);
     expect(() => t.act('screen', { type: 'next' })).toThrow(/phones/);
     expect(() => t.act('ana', { type: 'leaveShop' })).toThrow(/No shop/);
   });
