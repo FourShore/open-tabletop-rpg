@@ -10,8 +10,9 @@
     { "id": "leather-armor", "name": "Leather Armor", "kind": "equipment", "slot": "armor", "price": 10, "modifiers": { "armor": 1 } },
     { "id": "chain-mail", "name": "Chain Mail", "kind": "equipment", "slot": "armor", "price": 50, "modifiers": { "armor": 3, "dex": -1 } },
     { "id": "healing-potion", "name": "Healing Potion", "kind": "consumable", "price": 20,
-      "use": { "cost": "bonus", "targeting": { "target": "self" }, "effects": [{ "type": "heal", "target": "self", "amount": "2d4+2" }] } },
+      "use": { "cost": 1, "targeting": { "target": "self" }, "effects": [{ "type": "heal", "target": "self", "amount": "2d4+2" }] } },
     { "id": "ring-of-warding", "name": "Ring of Warding", "kind": "equipment", "slot": "trinket", "rarity": "rare", "price": 150, "modifiers": { "defense": 1, "wis": 1 } },
+    { "id": "scholars-monocle", "name": "Scholar's Monocle", "kind": "equipment", "slot": "head", "rarity": "rare", "price": 120, "description": "One extra tile on every level-up.", "modifiers": { "levelUpTiles": 1 } },
     { "id": "captains-sabre", "name": "Captain's Sabre", "kind": "equipment", "slot": "weapon", "rarity": "uncommon", "price": 80, "modifiers": { "attack": 1, "cha": 1 } }
   ],
   "lootTables": [
@@ -24,7 +25,8 @@
       { "id": "gold", "weight": 4, "count": "3d10" },
       { "id": "captains-sabre", "weight": 3 },
       { "id": "healing-potion", "weight": 3, "count": 2 },
-      { "id": "ring-of-warding", "weight": 1, "when": { "level": { "min": 3 } } }
+      { "id": "ring-of-warding", "weight": 1, "when": { "level": { "min": 3 } } },
+      { "id": "scholars-monocle", "weight": 1 }
     ] }
   ],
   "enemies": [

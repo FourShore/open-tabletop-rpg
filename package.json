@@ -1,0 +1,14 @@
+{
+  "name": "open-tabletop-rpg",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "validate": "npm run validate -w @otrpg/engine --",
+    "play": "npm run play -w @otrpg/engine --"
+  }
+}
