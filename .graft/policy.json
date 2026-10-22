@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "requireEvidence": "command",
+  "commands": {
+    "test": "npm test",
+    "typecheck": "npm run typecheck",
+    "validate": "npm run validate -- spec/example-pack"
+  },
+  "rules": [
+    { "paths": ["packages/**/*.ts", "packages/**/*.tsx"], "require": ["test", "typecheck"] },
+    { "paths": ["spec/**/*.json"], "require": ["validate", "test"] }
+  ],
+  "behaviorFiles": ["spec/**/*.json"]
+}
